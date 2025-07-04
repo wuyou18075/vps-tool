@@ -3,4 +3,4 @@
 
 
 easytiery安装脚本
-bash install_easytier.sh
+bash <(curl -sSL https://raw.githubusercontent.com/wuyou18075/vps-tool/main/install_easytier.sh)
