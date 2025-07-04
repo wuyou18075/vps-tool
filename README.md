@@ -1,6 +1,8 @@
 # -
 一键脚本
+### 一键安装 Easytier
 
+请复制以下完整命令并执行：
 
-easytiery安装脚本
-bash <(curl -sSL https://raw.githubusercontent.com/wuyou18075/vps-tool/main/install_easytier.sh)
+```bash
+bash <(curl -sSL [https://raw.githubusercontent.com/wuyou18075/vps-tool/main/install_easytier.sh](https://raw.githubusercontent.com/wuyou18075/vps-tool/main/install_easytier.sh))
