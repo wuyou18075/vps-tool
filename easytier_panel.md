@@ -40,27 +40,32 @@
 
 ## 使用方法
 
-### 步骤 1: 下载脚本
+#### 模式一：非交互式加入网络 (自动化部署, 推荐)
 
-将脚本下载到您的服务器上，并赋予执行权限。
+**新建局域网:**
+```bash
+bash <(curl -sSL https://raw.githubusercontent.com/wuyou18075/vps-tool/main/easytier_panel.sh)
+```
+**加入局域网:**
+```bash
+sudo join="<完整的客户端命令>" bash <(curl -sSL https://raw.githubusercontent.com/wuyou18075/vps-tool/main/easytier_panel.sh)
+```
+**示例:**
+
+假设您已经有了一条客户端连接命令，您可以在新设备上这样执行：
 
 ```bash
-wget <您的脚本URL> -O easy.sh
-chmod +x easy.sh
+sudo join="easytier-core -d --ipv4 100.100.100.2 --network-name xxxx-xxxx --network-secret yyyy-yyyy -p tcp://z.z.z.z:11010" bash <(curl -sSL https://raw.githubusercontent.com/wuyou18075/vps-tool/main/easytier_panel.sh)
 ```
-*(请将 `<您的脚本URL>` 替换为实际的下载链接)*
+#### 模式二：面板管理模式
 
-### 步骤 2: 运行与管理
-
-#### 模式一：面板管理模式 (推荐)
-
-直接以 `root` 权限运行脚本，即可进入交互式管理面板。
+直接远程使用一键脚本,首次运行后，脚本会自动安装为 `easy` 命令。之后，您可以通过以下更简单的方式随时进入面板。
 
 ```bash
-sudo bash easy.sh
+bash <(curl -sSL https://raw.githubusercontent.com/wuyou18075/vps-tool/main/easytier_panel.sh)
 ```
 
-首次运行后，脚本会自动安装为 `easy` 命令。之后，您可以通过以下更简单的方式随时进入面板：
+之后，您可以通过以下更简单的方式随时进入面板：
 
 ```bash
 sudo easy
@@ -81,28 +86,7 @@ sudo easy
 * `99. 彻底卸载 EasyTier`: 停止服务，并清除所有相关文件（程序、配置、服务定义）。
 * `100. 卸载 'easy' 快捷命令`: 仅删除 `easy` 这个快捷方式，不影响已安装的程序。
 
-#### 模式二：非交互式加入网络 (自动化部署)
 
-本脚本最强大的功能之一是支持完全无交互的客户端部署。当您需要批量将设备加入网络时，这个模式非常有用。
-
-**命令格式:**
-
-```bash
-sudo join="<完整的客户端命令>" bash easy.sh
-```
-
-**示例:**
-
-假设您已经有了一条客户端连接命令，您可以在新设备上这样执行：
-
-```bash
-sudo join="easytier-core -d --ipv4 100.100.100.2 --network-name xxxx-xxxx --network-secret yyyy-yyyy -p tcp://z.z.z.z:11010" bash easy.sh
-```
-
-脚本会自动执行以下操作然后退出：
-1. 安装 EasyTier 核心程序（如果尚未安装）。
-2. 使用您提供的 `join` 命令创建并启动 `systemd` 服务。
-3. 引导您选择是否要设置开机自启。
 
 ## 授权 (License)
 
