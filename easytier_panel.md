@@ -12,25 +12,16 @@
 
 ## 核心功能
 
-* **🚀 全自动安装与更新**: 自动检测服务器架构 (amd64/arm64)，并从 GitHub API 获取最新版本的 EasyTier 核心程序进行下载和安装。
-
+* **🚀 一键流式执行**: 无需手动下载文件，通过 `bash <(curl ...)` 命令直接从网络执行，干净、方便、快捷。
 * **🕹️ 便捷的交互式面板**: 为手动操作提供了清晰的菜单，涵盖了从安装到卸载的全生命周期管理。
-
 * **⚡ 强大的服务集成**: 与 `systemd` 深度集成，将 EasyTier 作为系统服务来管理，确保了运行的稳定性和开机自启的能力。
-
 * **🤖 双重非交互部署模式**:
     * **新建网络模式**: 通过环境变量传入网络参数，实现全自动部署一个新的网络主节点。
     * **加入网络模式**: 通过环境变量传入 `join` 命令，实现全自动部署一个网络客户端。
-
 * **🧠 智能参数处理**:
     * 在非交互模式下，您可以只提供部分核心参数，脚本会对未提供的参数使用合理的默认值或随机值，极大增强了灵活性。
     * 通过 `auto_start` 参数，您可以精确控制服务在非交互模式下是否需要开机自启。
-
-* **✨ 智能快捷命令**: 脚本会自动将自身安装为 `easy` 命令。每次直接运行脚本文件时，都会自动更新 `easy` 命令，确保其始终是最新版本。
-
-* **📊 信息聚合与展示**:
-    * **状态概览**: 在面板顶部实时显示核心程序、运行状态、虚拟地址、节点数等关键信息。
-    * **节点列表**: 提供一个经过格式化和颜色高亮的节点列表，让您对网络成员一目了然。
+* **✨ 智能快捷命令**: 脚本会自动将自身安装为 `easy` 命令。每次直接运行脚本时，都会自动更新 `easy` 命令，确保其始终是最新版本。
 
 ## 依赖与环境
 
@@ -38,43 +29,30 @@
 * **用户权限**: 需要 `root` 权限来运行 (或使用 `sudo`)。
 * **依赖工具**: `curl`, `unzip`, `find`, `awk` (脚本会自动检查)。
 
-## 使用方法
+## 使用方法 (推荐)
 
-### 步骤 1: 下载脚本
+### 用法一：面板管理模式 (手动操作)
 
-将脚本下载到您的 Linux 设备上，并赋予其执行权限。
-
-```bash
-# 建议将脚本命名为 easy.sh 以方便识别
-wget <您的脚本URL> -O easy.sh
-chmod +x easy.sh
-```
-
-*(请将 `<您的脚本URL>` 替换为实际的下载链接)*
-
-### 步骤 2: 执行脚本 (三种模式)
-
-#### 用法一：面板管理模式 (手动操作)
-
-如果您希望通过菜单进行交互式管理，直接以 `root` 权限运行脚本即可。
+如果您希望通过菜单进行交互式管理，请运行以下命令。它会直接从网络执行脚本并进入管理面板。
 
 ```bash
-# 首次运行会创建 easy 命令
-sudo bash easy.sh 
+sudo bash <(curl -sSL [https://raw.githubusercontent.com/wuyou18075/vps-tool/main/install_easytier.sh](https://raw.githubusercontent.com/wuyou18075/vps-tool/main/install_easytier.sh))
 ```
 
-首次运行后，脚本会自动安装为 `easy` 命令。之后，您可以通过以下更简单的方式随时进入面板：
+首次运行后，脚本会自动安装为 `easy` 命令。之后，您可以通过以下更简单的方式随时启动面板：
 
 ```bash
 sudo easy
 ```
 
-#### 用法二：非交互式 - 新建网络 (自动化部署主节点)
+### 用法二：非交互式部署模式 (自动化)
 
-当您需要自动化创建一个新的网络主节点时，使用此模式。通过环境变量传入参数。
+通过在命令前附加环境变量，可以实现全自动部署。
+
+#### 场景A: 新建网络
 
 **命令格式:**
-`sudo [参数1=值1] [参数2=值2] ... bash easy.sh`
+`sudo [参数1=值1] [参数2=值2] ... bash <(curl -sSL ...)`
 
 **参数说明及默认值:**
 
@@ -90,19 +68,14 @@ sudo easy
 
 **示例:**
 ```bash
-# 自动创建一个拥有随机名称和密钥，但IP和节点固定的网络，并设置开机自启
-sudo ipv4=10.0.0.1 node=tcp://my.server.com:11010 bash easy.sh
-
 # 创建一个所有参数都指定的网络，且不开机自启
-sudo ipv4=192.168.99.1 network_name=my-office network_secret=Secret123 auto_start=n bash easy.sh
+sudo ipv4=192.168.99.1 network_name=my-office network_secret=Secret123 auto_start=n bash <(curl -sSL [https://raw.githubusercontent.com/wuyou18075/vps-tool/main/install_easytier.sh](https://raw.githubusercontent.com/wuyou18075/vps-tool/main/install_easytier.sh))
 ```
 
-#### 用法三：非交互式 - 加入网络 (自动化部署客户端)
-
-当您需要自动化地将一台设备加入一个已存在的网络时，使用此模式。
+#### 场景B: 加入网络
 
 **命令格式:**
-`sudo join="<完整的客户端命令>" [auto_start=n] bash easy.sh`
+`sudo join="<完整的客户端命令>" [auto_start=n] bash <(curl -sSL ...)`
 
 **参数说明及默认值:**
 
@@ -114,10 +87,7 @@ sudo ipv4=192.168.99.1 network_name=my-office network_secret=Secret123 auto_star
 **示例:**
 ```bash
 # 将本机自动加入一个网络，并设置为开机自启
-sudo join="easytier-core -d --ipv4 100.10.10.2 --network-name my-net --network-secret my-secret-key -p tcp://1.2.3.4:11010" bash easy.sh
-
-# 加入网络，但不设置开机自启
-sudo join="..." auto_start=n bash easy.sh
+sudo join="easytier-core -d --ipv4 100.10.10.2 --network-name my-net --network-secret my-secret-key -p tcp://1.2.3.4:11010" bash <(curl -sSL [https://raw.githubusercontent.com/wuyou18075/vps-tool/main/install_easytier.sh](https://raw.githubusercontent.com/wuyou18075/vps-tool/main/install_easytier.sh))
 ```
 
 ## 授权 (License)
