@@ -14,3 +14,6 @@ bash <(curl -sSL https://raw.githubusercontent.com/wuyou18075/vps-tool/main/inst
 
 ```bash
 bash <(curl -sSL https://raw.githubusercontent.com/wuyou18075/vps-tool/main/easytier_panel.sh)
+
+idx一键开启 ssh连接
+bash <(wget -qO- https://raw.githubusercontent.com/fscarmen/tools/main/idx_ssh.sh)
