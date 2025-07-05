@@ -36,7 +36,7 @@
 如果您希望通过菜单进行交互式管理，请运行以下命令。它会直接从网络执行脚本并进入管理面板。
 
 ```bash
-sudo bash <(curl -sSL https://raw.githubusercontent.com/wuyou18075/vps-tool/main/install_easytier.sh)
+sudo bash <(curl -sSL https://raw.githubusercontent.com/wuyou18075/vps-tool/main/easytier_panel.sh)
 ```
 
 首次运行后，脚本会自动安装为 `easy` 命令。之后，您可以通过以下更简单的方式随时启动面板：
@@ -69,7 +69,7 @@ sudo easy
 **示例:**
 ```bash
 # 创建一个所有参数都指定的网络，且不开机自启
-sudo ipv4=192.168.99.1 network_name=my-office network_secret=Secret123 auto_start=n bash <(curl -sSL https://raw.githubusercontent.com/wuyou18075/vps-tool/main/install_easytier.sh)
+sudo ipv4=192.168.99.1 network_name=my-office network_secret=Secret123 auto_start=n bash <(curl -sSL https://raw.githubusercontent.com/wuyou18075/vps-tool/main/easytier_panel.sh)
 ```
 
 #### 场景B: 加入网络
@@ -87,7 +87,7 @@ sudo ipv4=192.168.99.1 network_name=my-office network_secret=Secret123 auto_star
 **示例:**
 ```bash
 # 将本机自动加入一个网络，并设置为开机自启
-sudo join="easytier-core -d --ipv4 100.10.10.2 --network-name my-net --network-secret my-secret-key -p tcp://1.2.3.4:11010" bash <(curl -sSL [https://raw.githubusercontent.com/wuyou18075/vps-tool/main/install_easytier.sh](https://raw.githubusercontent.com/wuyou18075/vps-tool/main/install_easytier.sh))
+sudo join="easytier-core -d --ipv4 100.10.10.2 --network-name my-net --network-secret my-secret-key -p tcp://1.2.3.4:11010" bash <(curl -sSL https://raw.githubusercontent.com/wuyou18075/vps-tool/main/easytier_panel.sh)
 ```
 
 ## 授权 (License)
