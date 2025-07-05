@@ -1,9 +1,13 @@
 #!/bin/bash
 
 #================================================================
-# EasyTier 交互式一键安装与管理脚本 V6.3 (最终稳定版)
+# EasyTier 交互式一键安装与管理脚本 V6.3
 #
 # 作者: Gemini @ Google
+# 版本: 6.3 (2025-07-05)
+# 更新日志 (V6.3):
+#   - [UX优化] 优化了首次运行的体验，`easy` 命令的安装提示会区分为“安装”和“更新”，使其逻辑更清晰。
+#   - [UX优化] 确保首次安装快捷命令后，会自动进入管理面板。
 #================================================================
 
 # --- 全局定义 ---
@@ -43,14 +47,35 @@ save_config() {
     echo "CFG_IPV4='${CFG_IPV4}'" >> "$CONFIG_FILE"; echo "CFG_USER='${CFG_USER}'" >> "$CONFIG_FILE";
     echo "CFG_PASSWORD='${CFG_PASSWORD}'" >> "$CONFIG_FILE"; echo "CFG_NODE='${CFG_NODE}'" >> "$CONFIG_FILE";
 }
-
+parse_args() {
+    for arg in "$@"; do
+        case $arg in
+            ipv4=*) CFG_IPV4="${arg#*=}" ;;
+            network_name=*) CFG_NETWORK_NAME="${arg#*=}" ;;
+            network_secret=*) CFG_NETWORK_SECRET="${arg#*=}" ;;
+            node=*) CFG_NODE_ARG="${arg#*=}" ;;
+            auto_start=*) CFG_AUTO_START="${arg#*=}" ;;
+            join=*) CFG_JOIN_COMMAND="${arg#*=}" ;;
+        esac
+    done
+}
+# [修改] 更新函数名和提示逻辑
 update_easy_command() {
-    echo -e "${YELLOW}正在更新 'easy' 快捷命令至当前版本...${NC}"
+    if [ -f "$EASY_COMMAND_PATH" ]; then
+        echo -e "${YELLOW}检测到旧版本，正在更新 'easy' 快捷命令至当前版本...${NC}"
+    else
+        echo -e "${YELLOW}首次运行，正在安装 'easy' 快捷命令...${NC}"
+    fi
+    
     cp "$0" "$EASY_COMMAND_PATH"
     chmod +x "$EASY_COMMAND_PATH"
+    
     if [ $? -ne 0 ]; then
-        echo -e "${RED}❌ 'easy' 命令更新失败! 请检查 ${INSTALL_DIR} 目录权限。${NC}"
+        echo -e "${RED}❌ 'easy' 命令安装/更新失败! 请检查 ${INSTALL_DIR} 目录权限。${NC}"
         exit 1
+    else
+        echo -e "${GREEN}✔ 'easy' 命令已就绪。${NC}"
+        sleep 1
     fi
 }
 
@@ -60,46 +85,12 @@ update_easy_command() {
 # 1. 安装/更新 EasyTier
 install_easytier() {
     if [ -f "${INSTALL_DIR}/easytier-core" ]; then echo -e "${GREEN}✔ EasyTier 核心程序已安装，跳过安装步骤。${NC}"; return 0; fi
-    echo -e "${BLUE}--- 1. 安装/更新 EasyTier 核心程序 ---${NC}"
-    check_dependencies
-    echo -e "${GREEN}正在获取最新版本号...${NC}"
-    LATEST_TAG=$(curl --silent "https://api.github.com/repos/EasyTier/EasyTier/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
-    if [ -z "$LATEST_TAG" ]; then echo -e "${RED}获取版本号失败!${NC}"; return 1; fi
-    echo -e "${GREEN}最新版本: ${YELLOW}${LATEST_TAG}${NC}"
-    ARCH=$(uname -m)
-    if [[ "$ARCH" != "x86_64" ]] && [[ "$ARCH" != "aarch64" ]]; then echo -e "${RED}不支持的架构: $ARCH${NC}"; return 1; fi
-    echo -e "${GREEN}系统架构: ${YELLOW}${ARCH}${NC}"
-    PACKAGE_NAME="easytier-linux-${ARCH}-${LATEST_TAG}.zip"
-    DOWNLOAD_URL="https://github.com/EasyTier/EasyTier/releases/download/${LATEST_TAG}/${PACKAGE_NAME}"
-    echo -e "${GREEN}正在下载: ${YELLOW}${DOWNLOAD_URL}${NC}"
-    curl -L -f -o "/tmp/${PACKAGE_NAME}" "${DOWNLOAD_URL}" || { echo -e "${RED}下载失败!${NC}"; return 1; }
-    TEMP_UNZIP_DIR=$(mktemp -d /tmp/easytier.XXXXXX)
-    echo -e "${GREEN}正在解压...${NC}"
-    unzip -o "/tmp/${PACKAGE_NAME}" -d "${TEMP_UNZIP_DIR}" > /dev/null || { echo -e "${RED}解压失败!${NC}"; rm -rf "${TEMP_UNZIP_DIR}"; return 1; }
-    CORE_PATH=$(find "${TEMP_UNZIP_DIR}" -name "easytier-core" -type f | head -n 1)
-    CLI_PATH=$(find "${TEMP_UNZIP_DIR}" -name "easytier-cli" -type f | head -n 1)
-    if [ -z "$CORE_PATH" ] || [ -z "$CLI_PATH" ]; then echo -e "${RED}错误: 未找到核心文件。${NC}"; rm -rf "${TEMP_UNZIP_DIR}"; rm -f "/tmp/${PACKAGE_NAME}"; return 1; fi
-    echo -e "${GREEN}正在安装可执行文件...${NC}"
-    mv "${CORE_PATH}" "${INSTALL_DIR}/easytier-core"; mv "${CLI_PATH}" "${INSTALL_DIR}/easytier-cli"
-    chmod +x "${INSTALL_DIR}/easytier-core"; chmod +x "${INSTALL_DIR}/easytier-cli"
-    rm -f "/tmp/${PACKAGE_NAME}"; rm -rf "${TEMP_UNZIP_DIR}"
-    echo -e "\n${GREEN}✔ EasyTier 核心程序安装成功!${NC}"
+    echo -e "${BLUE}--- 1. 安装/更新 EasyTier 核心程序 ---${NC}"; check_dependencies; echo -e "${GREEN}正在获取最新版本号...${NC}"; LATEST_TAG=$(curl --silent "https://api.github.com/repos/EasyTier/EasyTier/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/'); if [ -z "$LATEST_TAG" ]; then echo -e "${RED}获取版本号失败!${NC}"; return 1; fi; echo -e "${GREEN}最新版本: ${YELLOW}${LATEST_TAG}${NC}"; ARCH=$(uname -m); if [[ "$ARCH" != "x86_64" ]] && [[ "$ARCH" != "aarch64" ]]; then echo -e "${RED}不支持的架构: $ARCH${NC}"; return 1; fi; echo -e "${GREEN}系统架构: ${YELLOW}${ARCH}${NC}"; PACKAGE_NAME="easytier-linux-${ARCH}-${LATEST_TAG}.zip"; DOWNLOAD_URL="https://github.com/EasyTier/EasyTier/releases/download/${LATEST_TAG}/${PACKAGE_NAME}"; echo -e "${GREEN}正在下载: ${YELLOW}${DOWNLOAD_URL}${NC}"; curl -L -f -o "/tmp/${PACKAGE_NAME}" "${DOWNLOAD_URL}" || { echo -e "${RED}下载失败!${NC}"; return 1; }; TEMP_UNZIP_DIR=$(mktemp -d /tmp/easytier.XXXXXX); echo -e "${GREEN}正在解压...${NC}"; unzip -o "/tmp/${PACKAGE_NAME}" -d "${TEMP_UNZIP_DIR}" > /dev/null || { echo -e "${RED}解压失败!${NC}"; rm -rf "${TEMP_UNZIP_DIR}"; return 1; }; CORE_PATH=$(find "${TEMP_UNZIP_DIR}" -name "easytier-core" -type f | head -n 1); CLI_PATH=$(find "${TEMP_UNZIP_DIR}" -name "easytier-cli" -type f | head -n 1); if [ -z "$CORE_PATH" ] || [ -z "$CLI_PATH" ]; then echo -e "${RED}错误: 未找到核心文件。${NC}"; rm -rf "${TEMP_UNZIP_DIR}"; rm -f "/tmp/${PACKAGE_NAME}"; return 1; fi; echo -e "${GREEN}正在安装可执行文件...${NC}"; mv "${CORE_PATH}" "${INSTALL_DIR}/easytier-core"; mv "${CLI_PATH}" "${INSTALL_DIR}/easytier-cli"; chmod +x "${INSTALL_DIR}/easytier-core"; chmod +x "${INSTALL_DIR}/easytier-cli"; rm -f "/tmp/${PACKAGE_NAME}"; rm -rf "${TEMP_UNZIP_DIR}"; echo -e "\n${GREEN}✔ EasyTier 核心程序安装成功!${NC}";
 }
 
 # 2. 系统服务：新建网络
 create_network_service() {
-    local mode="$1"
-    echo -e "${BLUE}--- 2. 系统服务：新建网络 ---${NC}"
-    if ! command -v easytier-core &> /dev/null; then echo -e "${RED}错误: 'easytier-core' 未安装。请先执行选项 1。${NC}"; return; fi
-    
-    if [[ -n "$ipv4" ]]; then CFG_IPV4="$ipv4"; echo -e "${GREEN}✔ 已从环境变量读取虚拟地址: ${CFG_IPV4}${NC}"; else read -p "请输入局域网 IP (例如 10.10.10.1) [回车随机生成]: " input_ipv4; if [ -z "$input_ipv4" ]; then CFG_IPV4="100.$(shuf -i 0-255 -n 1).$(shuf -i 0-255 -n 1).1"; echo -e "${GREEN}未指定IP，已为您随机生成: ${YELLOW}${CFG_IPV4}${NC}"; else CFG_IPV4=$input_ipv4; fi; fi
-    if [[ -n "$network_name" ]]; then CFG_USER="$network_name"; echo -e "${GREEN}✔ 已从环境变量读取网络名称: ${CFG_USER}${NC}"; else read -p "请输入网络名称 [回车随机生成]: " input_user; CFG_USER=${input_user:-$(generate_uuid)}; fi
-    if [[ -n "$network_secret" ]]; then CFG_PASSWORD="$network_secret"; echo -e "${GREEN}✔ 已从环境变量读取网络密钥。${NC}"; else read -p "请输入网络密钥 [回车随机生成]: " input_password; CFG_PASSWORD=${input_password:-$(generate_uuid)}; fi
-    if [[ -n "$node" ]]; then CFG_NODE="$node"; echo -e "${GREEN}✔ 已从环境变量读取注册中心节点: ${CFG_NODE}${NC}"; else if [[ "$mode" == "non_interactive" ]]; then CFG_NODE="tcp://public.easytier.cn:11010"; echo -e "${GREEN}✔ 未指定 'node'，已使用默认注册中心节点。${NC}"; else read -p "请输入注册中心节点 [默认: tcp://public.easytier.cn:11010]: " input_node; CFG_NODE=${input_node:-"tcp://public.easytier.cn:11010"}; fi; fi
-    
-    save_config
-    local full_command="${INSTALL_DIR}/easytier-core --ipv4 ${CFG_IPV4} --network-name ${CFG_USER} --network-secret ${CFG_PASSWORD} -p ${CFG_NODE}"
-    echo -e "${GREEN}正在创建服务文件...${NC}"; cat > "$SERVICE_FILE" << EOF
+    local mode="$1"; echo -e "${BLUE}--- 2. 系统服务：新建网络 ---${NC}"; if ! command -v easytier-core &> /dev/null; then echo -e "${RED}错误: 'easytier-core' 未安装。请先执行选项 1。${NC}"; return; fi; CFG_IPV4=${CFG_IPV4}; if [[ -z "$CFG_IPV4" ]]; then read -p "请输入局域网 IP (例如 10.10.10.1) [回车随机生成]: " input_ipv4; if [ -z "$input_ipv4" ]; then CFG_IPV4="100.$(shuf -i 0-255 -n 1).$(shuf -i 0-255 -n 1).1"; echo -e "${GREEN}未指定IP，已为您随机生成: ${YELLOW}${CFG_IPV4}${NC}"; else CFG_IPV4=$input_ipv4; fi; else echo -e "${GREEN}✔ 已从参数读取虚拟地址: ${CFG_IPV4}${NC}"; fi; CFG_USER=${CFG_NETWORK_NAME}; if [[ -z "$CFG_USER" ]]; then read -p "请输入网络名称 [回车随机生成]: " input_user; CFG_USER=${input_user:-$(generate_uuid)}; else echo -e "${GREEN}✔ 已从参数读取网络名称: ${CFG_USER}${NC}"; fi; CFG_PASSWORD=${CFG_NETWORK_SECRET}; if [[ -z "$CFG_PASSWORD" ]]; then read -p "请输入网络密钥 [回车随机生成]: " input_password; CFG_PASSWORD=${input_password:-$(generate_uuid)}; else echo -e "${GREEN}✔ 已从参数读取网络密钥。${NC}"; fi; CFG_NODE=${CFG_NODE_ARG}; if [[ -z "$CFG_NODE" ]]; then if [[ "$mode" == "non_interactive" ]]; then CFG_NODE="tcp://public.easytier.cn:11010"; echo -e "${GREEN}✔ 未指定 'node' 参数，已使用默认注册中心节点。${NC}"; else read -p "请输入注册中心节点 [默认: tcp://public.easytier.cn:11010]: " input_node; CFG_NODE=${input_node:-"tcp://public.easytier.cn:11010"}; fi; else echo -e "${GREEN}✔ 已从参数读取注册中心节点: ${CFG_NODE}${NC}"; fi; save_config; local full_command="${INSTALL_DIR}/easytier-core --ipv4 ${CFG_IPV4} --network-name ${CFG_USER} --network-secret ${CFG_PASSWORD} -p ${CFG_NODE}"; echo -e "${GREEN}正在创建服务文件...${NC}"; cat > "$SERVICE_FILE" << EOF
 [Unit]
 Description=EasyTier Custom Service by Script
 After=network.target
@@ -112,24 +103,12 @@ LimitNOFILE=65535
 [Install]
 WantedBy=multi-user.target
 EOF
-    echo -e "${GREEN}正在重载 systemd 并启动服务...${NC}"; systemctl daemon-reload; systemctl restart "${SERVICE_NAME}"; sleep 2
-    if systemctl is-active --quiet "${SERVICE_NAME}"; then
-        echo -e "${GREEN}✔ 服务 '${SERVICE_NAME}' 已成功启动。${NC}"
-        if [[ "$mode" == "non_interactive" ]]; then if [[ "$auto_start" == "n" ]]; then systemctl disable "${SERVICE_NAME}"; echo -e "${YELLOW}根据 'auto_start=n' 参数，已取消开机自启。${NC}"; else systemctl enable "${SERVICE_NAME}"; echo -e "${GREEN}根据 'auto_start' 参数 (或默认)，已设置为开机自启。${NC}"; fi
-        else read -p "是否设置为开机自启? [Y/n]: " confirm_autostart; if [[ "$confirm_autostart" =~ ^[Nn]$ ]]; then systemctl disable "${SERVICE_NAME}"; echo -e "${YELLOW}已取消开机自启。${NC}"; else systemctl enable "${SERVICE_NAME}"; echo -e "${GREEN}已设置为开机自启。${NC}"; fi; fi
-    else
-        echo -e "${RED}❌ 服务启动失败! 请执行选项 4 查看详细错误。${NC}"
-    fi
+; echo -e "${GREEN}正在重载 systemd 并启动服务...${NC}"; systemctl daemon-reload; systemctl restart "${SERVICE_NAME}"; sleep 2; if systemctl is-active --quiet "${SERVICE_NAME}"; then echo -e "${GREEN}✔ 服务 '${SERVICE_NAME}' 已成功启动。${NC}"; if [[ "$mode" == "non_interactive" ]]; then if [[ "$CFG_AUTO_START" == "n" ]]; then systemctl disable "${SERVICE_NAME}"; echo -e "${YELLOW}根据 'auto_start=n' 参数，已取消开机自启。${NC}"; else systemctl enable "${SERVICE_NAME}"; echo -e "${GREEN}根据 'auto_start' 参数 (或默认)，已设置为开机自启。${NC}"; fi; else read -p "是否设置为开机自启? [Y/n]: " confirm_autostart; if [[ "$confirm_autostart" =~ ^[Nn]$ ]]; then systemctl disable "${SERVICE_NAME}"; echo -e "${YELLOW}已取消开机自启。${NC}"; else systemctl enable "${SERVICE_NAME}"; echo -e "${GREEN}已设置为开机自启。${NC}"; fi; fi; else echo -e "${RED}❌ 服务启动失败! 请执行选项 4 查看详细错误。${NC}"; fi;
 }
 
 # 3. 系统服务：加入网络
 join_network_service() {
-    local mode="$1"; local join_command_env="$2"
-    echo -e "${BLUE}--- 3. 系统服务：加入网络 ---${NC}"; if ! command -v easytier-core &> /dev/null; then echo -e "${RED}错误: 'easytier-core' 未安装。请先执行选项 1。${NC}"; return 1; fi;
-    local join_command=""; if [ -n "$join_command_env" ]; then echo -e "${GREEN}检测到外部传入的 join 命令。${NC}"; join_command="$join_command_env"; else echo -e "${YELLOW}请粘贴完整的客户端连接命令...:${NC}"; read -p "> " join_command; fi
-    if [[ ! "$join_command" == *"easytier-core"* ]]; then echo -e "${RED}错误: 输入的不是一个有效的 easytier-core 命令。${NC}"; return 1; fi
-    local full_command; full_command=$(echo "$join_command" | sed "s|easytier-core|${INSTALL_DIR}/easytier-core|")
-    echo -e "${GREEN}正在根据提供的命令创建服务文件...${NC}"; cat > "$SERVICE_FILE" << EOF
+    local mode="$1"; local join_command_arg="$2"; echo -e "${BLUE}--- 3. 系统服务：加入网络 ---${NC}"; if ! command -v easytier-core &> /dev/null; then echo -e "${RED}错误: 'easytier-core' 未安装。请先执行选项 1。${NC}"; return 1; fi; local join_command=""; if [ -n "$join_command_arg" ]; then echo -e "${GREEN}检测到外部传入的 join 命令。${NC}"; join_command="$join_command_arg"; else echo -e "${YELLOW}请粘贴完整的客户端连接命令...:${NC}"; read -p "> " join_command; fi; if [[ ! "$join_command" == *"easytier-core"* ]]; then echo -e "${RED}错误: 输入的不是一个有效的 easytier-core 命令。${NC}"; return 1; fi; local full_command; full_command=$(echo "$join_command" | sed "s|easytier-core|${INSTALL_DIR}/easytier-core|"); echo -e "${GREEN}正在根据提供的命令创建服务文件...${NC}"; cat > "$SERVICE_FILE" << EOF
 [Unit]
 Description=EasyTier Join-Network Service by Script
 After=network.target
@@ -142,15 +121,7 @@ LimitNOFILE=65535
 [Install]
 WantedBy=multi-user.target
 EOF
-    echo -e "${GREEN}正在重载 systemd 并启动服务...${NC}"; systemctl daemon-reload; systemctl restart "${SERVICE_NAME}"; sleep 2
-    if systemctl is-active --quiet "${SERVICE_NAME}"; then
-        echo -e "${GREEN}✔ 服务 '${SERVICE_NAME}' 已成功启动。${NC}"
-        if [[ "$mode" == "non_interactive" ]]; then if [[ "$auto_start" == "n" ]]; then systemctl disable "${SERVICE_NAME}"; echo -e "${YELLOW}根据 'auto_start=n' 参数，已取消开机自启。${NC}"; else systemctl enable "${SERVICE_NAME}"; echo -e "${GREEN}根据 'auto_start' 参数 (或默认)，已设置为开机自启。${NC}"; fi
-        else read -p "是否设置为开机自启? [Y/n]: " confirm_autostart; if [[ "$confirm_autostart" =~ ^[Nn]$ ]]; then systemctl disable "${SERVICE_NAME}"; echo -e "${YELLOW}已取消开机自启。${NC}"; else systemctl enable "${SERVICE_NAME}"; echo -e "${GREEN}已设置为开机自启。${NC}"; fi; fi
-    else
-        echo -e "${RED}❌ 服务启动失败! 请执行选项 4 查看详细错误。${NC}"
-    fi
-    return 0
+; echo -e "${GREEN}正在重载 systemd 并启动服务...${NC}"; systemctl daemon-reload; systemctl restart "${SERVICE_NAME}"; sleep 2; if systemctl is-active --quiet "${SERVICE_NAME}"; then echo -e "${GREEN}✔ 服务 '${SERVICE_NAME}' 已成功启动。${NC}"; if [[ "$mode" == "non_interactive" ]]; then if [[ "$CFG_AUTO_START" == "n" ]]; then systemctl disable "${SERVICE_NAME}"; echo -e "${YELLOW}根据 'auto_start=n' 参数，已取消开机自启。${NC}"; else systemctl enable "${SERVICE_NAME}"; echo -e "${GREEN}根据 'auto_start' 参数 (或默认)，已设置为开机自启。${NC}"; fi; else read -p "是否设置为开机自启? [Y/n]: " confirm_autostart; if [[ "$confirm_autostart" =~ ^[Nn]$ ]]; then systemctl disable "${SERVICE_NAME}"; echo -e "${YELLOW}已取消开机自启。${NC}"; else systemctl enable "${SERVICE_NAME}"; echo -e "${GREEN}已设置为开机自启。${NC}"; fi; fi; else echo -e "${RED}❌ 服务启动失败! 请执行选项 4 查看详细错误。${NC}"; fi; return 0;
 }
 
 # 4. 查看服务运行状态
@@ -190,7 +161,7 @@ stop_service() {
 
 # 99. 彻底卸载 EasyTier
 uninstall_easytier() {
-    echo -e "${YELLOW}--- 99. 彻底卸载 EasyTier ---${NC}"; echo -e "${GREEN}正在停止并删除系统服务...${NC}"; systemctl stop "${SERVICE_NAME}" 2>/dev/null; systemctl disable "${SERVICE_NAME}" 2>/dev/null; rm -f "$SERVICE_FILE"; systemctl daemon-reload; echo -e "${GREEN}正在删除可执行文件...${NC}"; rm -f "${INSTALL_DIR}/easytier-core" "${INSTALL_DIR}/easytier-cli"; read -p "是否删除所有配置文件 (${CONFIG_DIR})? [y/N]: " confirm_delete_config; if [[ "$confirm_delete_config" =~ ^[Yy]$ ]]; then echo -e "${GREEN}正在删除配置文件目录...${NC}"; rm -rf "$CONFIG_DIR"; fi; if [ -f "$EASY_COMMAND_PATH" ]; then echo -e "${GREEN}正在删除 'easy' 快捷命令...${NC}"; rm -f "$EASY_COMMAND_PATH"; fi; echo -e "\n${GREEN}✔ EasyTier 已彻底卸载。${NC}";
+    echo -e "${YELLOW}--- 99. 彻底卸载 EasyTier ---${NC}"; echo -e "${GREEN}正在停止并删除系统服务...${NC}"; systemctl stop "${SERVICE_NAME}" 2>/dev/null; systemctl disable "${SERVICE_NAME}" 2>/dev/null; rm -f "$SERVICE_FILE"; systemctl daemon-reload; echo -e "${GREEN}正在删除可执行文件...${NC}"; rm -f "${INSTALL_DIR}/easy-core" "${INSTALL_DIR}/easytier-cli"; read -p "是否删除所有配置文件 (${CONFIG_DIR})? [y/N]: " confirm_delete_config; if [[ "$confirm_delete_config" =~ ^[Yy]$ ]]; then echo -e "${GREEN}正在删除配置文件目录...${NC}"; rm -rf "$CONFIG_DIR"; fi; if [ -f "$EASY_COMMAND_PATH" ]; then echo -e "${GREEN}正在删除 'easy' 快捷命令...${NC}"; rm -f "$EASY_COMMAND_PATH"; fi; echo -e "\n${GREEN}✔ EasyTier 已彻底卸载。${NC}";
 }
 
 # 100. 卸载 'easy' 快捷命令
@@ -205,13 +176,13 @@ display_status_dashboard() {
 
 # 显示主菜单
 show_menu() {
-    display_status_dashboard; echo -e "${BLUE}========== EasyTier 管理面板 V6.2 ==========${NC}"; echo -e " ${GREEN}1. 安装/更新 EasyTier${NC}"; echo -e " ${GREEN}2. 系统服务：新建网络${NC}"; echo -e " ${GREEN}3. 系统服务：加入网络${NC}"; echo -e " ${YELLOW}4. 查看服务运行状态 (systemctl)${NC}"; echo -e "------------------------------------"; echo -e " ${CYAN}5. 查看内网节点${NC}"; echo -e " ${CYAN}6. 查看节点路由列表 (完整)${NC}"; echo -e " ${CYAN}7. 查看本机启动命令${NC}"; echo -e " ${CYAN}8. 生成客户端连接命令 (用于新网络)${NC}"; echo -e "------------------------------------"; echo -e " ${YELLOW}9. 关闭开机自启${NC}"; echo -e " ${RED}10. 关闭 EasyTier 服务${NC}"; echo -e " ${RED}99. 彻底卸载 EasyTier${NC}"; echo -e " ${RED}100. 卸载 'easy' 快捷命令${NC}"; echo -e " ${RED}0. 退出脚本${NC}"; echo -e "${BLUE}===========================================${NC}"; read -p "请输入选项 [0-100]: " choice;
+    display_status_dashboard; echo -e "${BLUE}========== EasyTier 管理面板 V6.3 ==========${NC}"; echo -e " ${GREEN}1. 安装/更新 EasyTier${NC}"; echo -e " ${GREEN}2. 系统服务：新建网络${NC}"; echo -e " ${GREEN}3. 系统服务：加入网络${NC}"; echo -e " ${YELLOW}4. 查看服务运行状态 (systemctl)${NC}"; echo -e "------------------------------------"; echo -e " ${CYAN}5. 查看内网节点${NC}"; echo -e " ${CYAN}6. 查看节点路由列表 (完整)${NC}"; echo -e " ${CYAN}7. 查看本机启动命令${NC}"; echo -e " ${CYAN}8. 生成客户端连接命令 (用于新网络)${NC}"; echo -e "------------------------------------"; echo -e " ${YELLOW}9. 关闭开机自启${NC}"; echo -e " ${RED}10. 关闭 EasyTier 服务${NC}"; echo -e " ${RED}99. 彻底卸载 EasyTier${NC}"; echo -e " ${RED}100. 卸载 'easy' 快捷命令${NC}"; echo -e " ${RED}0. 退出脚本${NC}"; echo -e "${BLUE}===========================================${NC}"; read -p "请输入选项 [0-100]: " choice;
 }
 
 # --- 主程序执行 ---
 check_root
 
-# 只有在直接运行脚本文件时（而不是通过`easy`命令），才执行更新
+# [重大修复] 无论以何种模式运行，只要是直接执行脚本文件，就必须先更新快捷命令
 if [[ "$0" != "$EASY_COMMAND_PATH" ]]; then
     update_easy_command
 fi
@@ -228,6 +199,7 @@ fi
 # 检查是否为“加入网络”非交互模式 (使用环境变量)
 if [ -n "$join" ]; then
     echo -e "${YELLOW}检测到 'join' 参数，进入非交互模式...${NC}"
+    # 将 join 环境变量的值传递给函数
     install_easytier && join_network_service "non_interactive" "$join" && \
     echo -e "\n${GREEN}✔ 非交互式任务执行完毕。${NC}" && \
     echo -e "${CYAN}提示: 'easy' 快捷命令已更新，您现在可以使用 'sudo easy' 来打开管理面板。${NC}"
@@ -240,8 +212,8 @@ while true; do
     show_menu
     case $choice in
         1) install_easytier ;;
-        2) create_network_service "interactive" ;; # 传递交互模式标记
-        3) join_network_service "interactive" "" ;; # 传递交互模式标记和空的join命令
+        2) create_network_service "interactive" ;;
+        3) join_network_service "interactive" "" ;;
         4) view_service_status ;;
         5) view_pool_ips ;;
         6) view_routes ;;
