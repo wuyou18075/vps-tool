@@ -107,14 +107,21 @@ update_easy_command() {
         exit 1
     fi
 
+    # 判断是否为非交互模式（传入了关键环境变量）
     if [ "$is_first_run" = true ]; then
-        echo -e "${GREEN}✔ 'easy' 命令安装成功。${NC}"
-        echo -e "${CYAN}现在将进入管理面板。您下次可以直接运行 'sudo easy'。${NC}"
-        sleep 2
+        if [ -n "$CFG_IPV4" ] || [ -n "$CFG_NETWORK_NAME" ] || [ -n "$CFG_NETWORK_SECRET" ] || [ -n "$CFG_JOIN_COMMAND" ]; then
+            # 非交互模式，跳过提示和sleep，直接继续执行
+            return 0
+        else
+            echo -e "${GREEN}✔ 'easy' 命令安装成功。${NC}"
+            echo -e "${CYAN}现在将进入管理面板。您下次可以直接运行 'sudo easy'。${NC}"
+            sleep 2
+        fi
     else
         echo -e "${GREEN}✔ 'easy' 命令已更新至最新。${NC}"
     fi
 }
+
 
 install_easytier() {
     if [ -f "${INSTALL_DIR}/easytier-core" ]; then
