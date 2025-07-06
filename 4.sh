@@ -3,11 +3,11 @@ set -euo pipefail
 IFS=$'\n\t'
 
 #================================================================
-# EasyTier 交互式一键安装与管理脚本 V7.2 (优化提示版)
+# EasyTier 交互式一键安装与管理脚本 V7.1 (功能增强版)
 #
 # 作者: Gemini @ Google
-# 版本: 7.2 (2025-07-06)
-# 备注: 优化了快捷命令安装后的提示信息
+# 版本: 7.1 (2025-07-06)
+# 备注: 根据要求重新加入 'easy' 命令管理并调整菜单
 #================================================================
 
 # --- 颜色定义 ---
@@ -81,6 +81,7 @@ save_config() {
 
 update_easy_command() {
     echo -e "${YELLOW}正在安装/更新 'easy' 快捷命令至当前版本...${NC}"
+    # 使用 cp 命令复制脚本自身，确保可执行
     if ! cp "$0" "$EASY_COMMAND_PATH"; then
         echo -e "${RED}❌ 'easy' 命令复制失败! 请检查 ${INSTALL_DIR} 目录权限。${NC}"
         return 1
@@ -90,9 +91,9 @@ update_easy_command() {
         return 1
     fi
     
+    # 仅在交互模式下显示成功信息
     if [[ "${1:-}" != "non_interactive_first_run" ]]; then
-       echo -e "${GREEN}✔ 'easy' 快捷命令已安装/更新。${NC}"
-       echo -e "${YELLOW}请注意: 要想在当前窗口立即使用 'easy' 命令, 请执行 ${CYAN}hash -r${YELLOW} 命令, 或直接重新登录SSH。${NC}"
+       echo -e "${GREEN}✔ 'easy' 快捷命令已安装/更新。现在您可以在任何地方使用 'sudo easy' 来运行此脚本。${NC}"
     fi
 }
 
@@ -101,7 +102,7 @@ uninstall_easy_command() {
     if [ -f "$EASY_COMMAND_PATH" ]; then
         if rm -f "$EASY_COMMAND_PATH"; then
             echo -e "${GREEN}✔ 快捷命令 'easy' 已成功卸载。${NC}"
-            echo -e "${YELLOW}您可能需要重新打开终端或执行 ${CYAN}hash -r${YELLOW} 使其在当前窗口完全失效。${NC}"
+            echo -e "${YELLOW}您可能需要重新打开终端使其完全失效。${NC}"
         else
             echo -e "${RED}❌ 快捷命令 'easy' 卸载失败。${NC}"
         fi
@@ -390,7 +391,7 @@ view_startup_command() {
 }
 
 generate_client_command() {
-    echo -e "${BLUE}--- 8. 生成客户端连接命令 ---${NC}"
+    echo -e "${BLUE}--- 8. 生成客户端连接命令 (用于新网络) ---${NC}"
     local network_name="" network_secret="" peer_node="" base_ip=""
     if source "$CONFIG_FILE" 2>/dev/null; then
         echo -e "${CYAN}INFO: 使用配置文件中的网络参数。${NC}"
@@ -540,7 +541,7 @@ display_status_dashboard() {
 
 show_menu() {
     display_status_dashboard
-    echo -e "${BLUE}======== EasyTier 管理面板 V7.2 ==========${NC}"
+    echo -e "${BLUE}======== EasyTier 管理面板 V7.1 ==========${NC}"
     echo -e " ${GREEN}1. 安装/更新 EasyTier${NC}"
     echo -e " ${GREEN}2. 系统服务：新建网络${NC}"
     echo -e " ${GREEN}3. 系统服务：加入网络${NC}"
@@ -568,7 +569,7 @@ if [[ -n "${ipv4:-}" || -n "${network_name:-}" || -n "${network_secret:-}" ]]; t
     install_easytier && create_network_service "non_interactive"
     echo -e "\n${GREEN}✔ 非交互式任务执行完毕。${NC}"
     update_easy_command "non_interactive_first_run"
-    echo -e "${CYAN}提示: 'easy' 快捷命令已安装。请重新登录或执行 'hash -r' 以便立即使用。${NC}"
+    echo -e "${CYAN}提示: 'easy' 快捷命令已安装，您现在可以使用 'sudo easy' 来打开管理面板。${NC}"
     exit 0
 fi
 
@@ -577,10 +578,12 @@ if [[ -n "${join:-}" ]]; then
     install_easytier && join_network_service "non_interactive" "$join"
     echo -e "\n${GREEN}✔ 非交互式任务执行完毕。${NC}"
     update_easy_command "non_interactive_first_run"
-    echo -e "${CYAN}提示: 'easy' 快捷命令已安装。请重新登录或执行 'hash -r' 以便立即使用。${NC}"
+    echo -e "${CYAN}提示: 'easy' 快捷命令已安装，您现在可以使用 'sudo easy' 来打开管理面板。${NC}"
     exit 0
 fi
 
+# 如果是通过URL下载后直接执行的，脚本名可能是 /proc/self/fd/63 这类
+# 如果脚本名不是 easy, 则提示用户可以安装
 if [[ "$(basename "$0")" != "easy" && "$0" != "$EASY_COMMAND_PATH" && ! -f "$EASY_COMMAND_PATH" ]]; then
     echo -e "${YELLOW}>>> 检测到您还未安装 'easy' 快捷命令。${NC}"
     echo -e "${YELLOW}>>> 安装后，您可以在任何路径下使用 'sudo easy' 打开此面板。${NC}"
