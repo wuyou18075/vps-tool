@@ -3,11 +3,11 @@ set -euo pipefail
 IFS=$'\n\t'
 
 #================================================================
-# EasyTier 交互式一键安装与管理脚本 V7.2 (功能增强版)
+# EasyTier 交互式一键安装与管理脚本 V7.3 (纯净版)
 #
 # 作者: Gemini @ Google
-# 版本: 7.2 (2025-07-06)
-# 备注: 增强非交互模式，在新建网络后自动打印客户端连接命令。
+# 版本: 7.3 (2025-07-06)
+# 备注: 根据要求，在非交互模式下禁用'easy'命令的自动安装。
 #================================================================
 
 # --- 颜色定义 ---
@@ -80,7 +80,7 @@ save_config() {
 }
 
 update_easy_command() {
-    echo -e "${YELLOW}正在安装/更新 'easy' 快捷命令至当前版本...${NC}"
+    echo -e "${YELLOW}正在安装/更新 'easy' 快捷命令...${NC}"
     # 使用 cp 命令复制脚本自身，确保可执行
     if ! cp "$0" "$EASY_COMMAND_PATH"; then
         echo -e "${RED}❌ 'easy' 命令复制失败! 请检查 ${INSTALL_DIR} 目录权限。${NC}"
@@ -90,11 +90,7 @@ update_easy_command() {
         echo -e "${RED}❌ 'easy' 命令授权失败!${NC}"
         return 1
     fi
-    
-    # 仅在交互模式下显示成功信息
-    if [[ "${1:-}" != "non_interactive_first_run" ]]; then
-       echo -e "${GREEN}✔ 'easy' 快捷命令已安装/更新。现在您可以在任何地方使用 'sudo easy' 来运行此脚本。${NC}"
-    fi
+    echo -e "${GREEN}✔ 'easy' 快捷命令已安装/更新。现在您可以在任何地方使用 'sudo easy' 来运行此脚本。${NC}"
 }
 
 uninstall_easy_command() {
@@ -547,7 +543,7 @@ display_status_dashboard() {
 
 show_menu() {
     display_status_dashboard
-    echo -e "${BLUE}======== EasyTier 管理面板 V7.2 ==========${NC}"
+    echo -e "${BLUE}======== EasyTier 管理面板 V7.3 ==========${NC}"
     echo -e " ${GREEN}1. 安装/更新 EasyTier${NC}"
     echo -e " ${GREEN}2. 系统服务：新建网络${NC}"
     echo -e " ${GREEN}3. 系统服务：加入网络${NC}"
@@ -574,11 +570,7 @@ if [[ -n "${ipv4:-}" || -n "${network_name:-}" || -n "${network_secret:-}" ]]; t
     echo -e "${YELLOW}检测到 '新建网络' 参数，进入非交互模式...${NC}"
     install_easytier && create_network_service "non_interactive" && {
         echo -e "\n${GREEN}✔ 非交互式任务执行完毕。${NC}"
-        echo # 留出空行以增加可读性
         generate_client_command
-        echo # 留出空行以增加可读性
-        update_easy_command "non_interactive_first_run"
-        echo -e "${CYAN}提示: 'easy' 快捷命令已安装，您现在可以使用 'sudo easy' 来打开管理面板。${NC}"
     }
     exit 0
 fi
@@ -587,14 +579,11 @@ if [[ -n "${join:-}" ]]; then
     echo -e "${YELLOW}检测到 'join' 参数，进入非交互模式...${NC}"
     install_easytier && join_network_service "non_interactive" "$join" && {
       echo -e "\n${GREEN}✔ 非交互式任务执行完毕。${NC}"
-      update_easy_command "non_interactive_first_run"
-      echo -e "${CYAN}提示: 'easy' 快捷命令已安装，您现在可以使用 'sudo easy' 来打开管理面板。${NC}"
     }
     exit 0
 fi
 
-# 如果是通过URL下载后直接执行的，脚本名可能是 /proc/self/fd/63 这类
-# 如果脚本名不是 easy, 则提示用户可以安装
+# 如果是通过URL下载后直接执行，且是首次，提示用户可以安装快捷命令
 if [[ "$(basename "$0")" != "easy" && "$0" != "$EASY_COMMAND_PATH" && ! -f "$EASY_COMMAND_PATH" ]]; then
     echo -e "${YELLOW}>>> 检测到您还未安装 'easy' 快捷命令。${NC}"
     echo -e "${YELLOW}>>> 安装后，您可以在任何路径下使用 'sudo easy' 打开此面板。${NC}"
@@ -614,7 +603,7 @@ while true; do
         4) view_service_status ;;
         5) view_pool_ips ;;
         6) view_routes ;;
-        7) view_startup_command ;;
+        7.1) view_startup_command ;;
         8) generate_client_command ;;
         9) manage_easy_command ;;
         10) manage_autostart ;;
