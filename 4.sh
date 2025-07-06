@@ -3,11 +3,11 @@ set -euo pipefail
 IFS=$'\n\t'
 
 #================================================================
-# EasyTier 交互式一键安装与管理脚本 V7.1 (功能增强版)
+# EasyTier 交互式一键安装与管理脚本 V7.2 (功能增强版)
 #
 # 作者: Gemini @ Google
-# 版本: 7.1 (2025-07-06)
-# 备注: 根据要求重新加入 'easy' 命令管理并调整菜单
+# 版本: 7.2 (2025-07-06)
+# 备注: 增强非交互模式，在新建网络后自动打印客户端连接命令。
 #================================================================
 
 # --- 颜色定义 ---
@@ -418,7 +418,13 @@ generate_client_command() {
     local server_ip_base server_ip_last client_last_octet client_ip client_command
     server_ip_base=$(echo "$base_ip" | cut -d'.' -f1-3)
     server_ip_last=$(echo "$base_ip" | cut -d'.' -f4)
-    read -r -p "请输入客户端 IP 的末尾数字 (2-254) [回车不指定]: " client_last_octet
+    client_last_octet=""
+    
+    # 仅在交互式终端下提示输入
+    if [ -t 0 ]; then
+        read -r -p "请输入客户端 IP 的末尾数字 (2-254) [回车不指定]: " client_last_octet
+    fi
+
     client_command="easytier-core -d --network-name ${network_name} --network-secret ${network_secret} -p ${peer_node}"
     if [ -n "$client_last_octet" ]; then
         if [[ "$client_last_octet" == "$server_ip_last" ]]; then
@@ -428,7 +434,7 @@ generate_client_command() {
         client_ip="${server_ip_base}.${client_last_octet}"
         client_command="${client_command} --ipv4 ${client_ip}"
     fi
-    echo -e "\n${GREEN}生成的客户端连接命令是:${NC}"
+    echo -e "\n${GREEN}✔ 生成的客户端一键加入命令如下 (供其他设备使用):${NC}"
     echo -e "${YELLOW}${client_command}${NC}"
 }
 
@@ -541,7 +547,7 @@ display_status_dashboard() {
 
 show_menu() {
     display_status_dashboard
-    echo -e "${BLUE}======== EasyTier 管理面板 V7.1 ==========${NC}"
+    echo -e "${BLUE}======== EasyTier 管理面板 V7.2 ==========${NC}"
     echo -e " ${GREEN}1. 安装/更新 EasyTier${NC}"
     echo -e " ${GREEN}2. 系统服务：新建网络${NC}"
     echo -e " ${GREEN}3. 系统服务：加入网络${NC}"
@@ -566,19 +572,24 @@ check_root
 
 if [[ -n "${ipv4:-}" || -n "${network_name:-}" || -n "${network_secret:-}" ]]; then
     echo -e "${YELLOW}检测到 '新建网络' 参数，进入非交互模式...${NC}"
-    install_easytier && create_network_service "non_interactive"
-    echo -e "\n${GREEN}✔ 非交互式任务执行完毕。${NC}"
-    update_easy_command "non_interactive_first_run"
-    echo -e "${CYAN}提示: 'easy' 快捷命令已安装，您现在可以使用 'sudo easy' 来打开管理面板。${NC}"
+    install_easytier && create_network_service "non_interactive" && {
+        echo -e "\n${GREEN}✔ 非交互式任务执行完毕。${NC}"
+        echo # 留出空行以增加可读性
+        generate_client_command
+        echo # 留出空行以增加可读性
+        update_easy_command "non_interactive_first_run"
+        echo -e "${CYAN}提示: 'easy' 快捷命令已安装，您现在可以使用 'sudo easy' 来打开管理面板。${NC}"
+    }
     exit 0
 fi
 
 if [[ -n "${join:-}" ]]; then
     echo -e "${YELLOW}检测到 'join' 参数，进入非交互模式...${NC}"
-    install_easytier && join_network_service "non_interactive" "$join"
-    echo -e "\n${GREEN}✔ 非交互式任务执行完毕。${NC}"
-    update_easy_command "non_interactive_first_run"
-    echo -e "${CYAN}提示: 'easy' 快捷命令已安装，您现在可以使用 'sudo easy' 来打开管理面板。${NC}"
+    install_easytier && join_network_service "non_interactive" "$join" && {
+      echo -e "\n${GREEN}✔ 非交互式任务执行完毕。${NC}"
+      update_easy_command "non_interactive_first_run"
+      echo -e "${CYAN}提示: 'easy' 快捷命令已安装，您现在可以使用 'sudo easy' 来打开管理面板。${NC}"
+    }
     exit 0
 fi
 
