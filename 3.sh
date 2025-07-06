@@ -1,23 +1,23 @@
 #!/bin/bash
+set -euo pipefail
+IFS=$'\n\t'
 
 #================================================================
 # EasyTier 交互式一键安装与管理脚本 V7.0 (最终无压缩修复版)
 #
 # 作者: Gemini @ Google
 # 版本: 7.0 (2025-07-05)
-# 更新日志 (V7.0):
-#   - [紧急修复] 确保所有函数都以完整、多行的正确格式提供，彻底解决因代码压缩导致的致命语法错误。
-#   - [逻辑修复] 修正了通过环境变量传递 'join' 参数时，无法进入非交互模式的BUG。
-#   - [原则声明] 本脚本及未来版本将严格遵守“可执行性优先”原则，不再进行任何代码压缩。
 #================================================================
 
-# --- 全局定义 ---
+# --- 颜色定义 ---
 GREEN='\033[0;32m'
 RED='\033[0;31m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 CYAN='\033[0;36m'
 NC='\033[0m'
+
+# --- 路径定义 ---
 INSTALL_DIR="/usr/local/bin"
 EASY_COMMAND_PATH="${INSTALL_DIR}/easy"
 CONFIG_DIR="/etc/easytier"
@@ -34,14 +34,16 @@ check_root() {
 }
 
 check_dependencies() {
-    if ! command -v curl &> /dev/null || ! command -v unzip &> /dev/null || ! command -v find &> /dev/null || ! command -v awk &> /dev/null; then
-        echo -e "${RED}错误: 依赖 'curl, unzip, find, awk' 未找到。${NC}"
-        exit 1
-    fi
+    for cmd in curl unzip find awk; do
+        if ! command -v "$cmd" &>/dev/null; then
+            echo -e "${RED}错误: 依赖 '$cmd' 未找到。${NC}"
+            exit 1
+        fi
+    done
 }
 
 generate_uuid() {
-    if command -v uuidgen &> /dev/null; then
+    if command -v uuidgen &>/dev/null; then
         uuidgen
     else
         cat /proc/sys/kernel/random/uuid
@@ -55,7 +57,7 @@ get_local_virtual_ip() {
     fi
     local local_ip
     local_ip=$(easytier-cli route 2>/dev/null | awk -F '│' '
-        $6 ~ /Local/ { 
+        $6 ~ /Local/ {
             ip_raw = $2;
             gsub(/^[[:space:]]+|[[:space:]]+$/, "", ip_raw);
             sub(/\/.*$/, "", ip_raw);
@@ -67,11 +69,13 @@ get_local_virtual_ip() {
 
 save_config() {
     mkdir -p "$CONFIG_DIR"
-    echo "# EasyTier 自定义配置" > "$CONFIG_FILE"
-    echo "CFG_IPV4='${CFG_IPV4}'" >> "$CONFIG_FILE"
-    echo "CFG_USER='${CFG_USER}'" >> "$CONFIG_FILE"
-    echo "CFG_PASSWORD='${CFG_PASSWORD}'" >> "$CONFIG_FILE"
-    echo "CFG_NODE='${CFG_NODE}'" >> "$CONFIG_FILE"
+    {
+        echo "# EasyTier 自定义配置"
+        echo "CFG_IPV4='${CFG_IPV4}'"
+        echo "CFG_USER='${CFG_USER}'"
+        echo "CFG_PASSWORD='${CFG_PASSWORD}'"
+        echo "CFG_NODE='${CFG_NODE}'"
+    } > "$CONFIG_FILE"
 }
 
 update_easy_command() {
@@ -82,14 +86,13 @@ update_easy_command() {
         echo -e "${RED}❌ 'easy' 命令更新失败! 请检查 ${INSTALL_DIR} 目录权限。${NC}"
         exit 1
     fi
-    if [[ "$1" != "non_interactive_first_run" ]]; then
+    if [[ "${1:-}" != "non_interactive_first_run" ]]; then
        echo -e "${GREEN}✔ 'easy' 命令已更新。${NC}"
     fi
 }
 
 # --- 核心功能函数 ---
 
-# 1. 安装/更新 EasyTier
 install_easytier() {
     if [ -f "${INSTALL_DIR}/easytier-core" ]; then
         echo -e "${GREEN}✔ EasyTier 核心程序已安装，跳过安装步骤。${NC}"
@@ -105,7 +108,7 @@ install_easytier() {
     fi
     echo -e "${GREEN}最新版本: ${YELLOW}${LATEST_TAG}${NC}"
     ARCH=$(uname -m)
-    if [[ "$ARCH" != "x86_64" ]] && [[ "$ARCH" != "aarch64" ]]; then
+    if [[ "$ARCH" != "x86_64" && "$ARCH" != "aarch64" ]]; then
         echo -e "${RED}不支持的架构: $ARCH${NC}"
         return 1
     fi
@@ -128,52 +131,50 @@ install_easytier() {
     echo -e "${GREEN}正在安装可执行文件...${NC}"
     mv "${CORE_PATH}" "${INSTALL_DIR}/easytier-core"
     mv "${CLI_PATH}" "${INSTALL_DIR}/easytier-cli"
-    chmod +x "${INSTALL_DIR}/easytier-core"
-    chmod +x "${INSTALL_DIR}/easytier-cli"
+    chmod +x "${INSTALL_DIR}/easytier-core" "${INSTALL_DIR}/easytier-cli"
     rm -f "/tmp/${PACKAGE_NAME}"
     rm -rf "${TEMP_UNZIP_DIR}"
     echo -e "\n${GREEN}✔ EasyTier 核心程序安装成功!${NC}"
 }
 
-# 2. 系统服务：新建网络
 create_network_service() {
     local mode="$1"
     echo -e "${BLUE}--- 2. 系统服务：新建网络 ---${NC}"
-    if ! command -v easytier-core &> /dev/null; then
+    if ! command -v easytier-core &>/dev/null; then
         echo -e "${RED}错误: 'easytier-core' 未安装。请先执行选项 1。${NC}"
-        return
+        return 1
     fi
-    
-    if [[ -n "$ipv4" ]]; then
+
+    if [[ -n "${ipv4:-}" ]]; then
         CFG_IPV4="$ipv4"
         echo -e "${GREEN}✔ 已从环境变量读取虚拟地址: ${CFG_IPV4}${NC}"
     else
-        read -p "请输入局域网 IP (例如 10.10.10.1) [回车随机生成]: " input_ipv4
+        read -r -p "请输入局域网 IP (例如 10.10.10.1) [回车随机生成]: " input_ipv4
         if [ -z "$input_ipv4" ]; then
             CFG_IPV4="100.$(shuf -i 0-255 -n 1).$(shuf -i 0-255 -n 1).1"
             echo -e "${GREEN}未指定IP，已为您随机生成: ${YELLOW}${CFG_IPV4}${NC}"
         else
-            CFG_IPV4=$input_ipv4
+            CFG_IPV4="$input_ipv4"
         fi
     fi
 
-    if [[ -n "$network_name" ]]; then
+    if [[ -n "${network_name:-}" ]]; then
         CFG_USER="$network_name"
         echo -e "${GREEN}✔ 已从环境变量读取网络名称: ${CFG_USER}${NC}"
     else
-        read -p "请输入网络名称 [回车随机生成]: " input_user
-        CFG_USER=${input_user:-$(generate_uuid)}
+        read -r -p "请输入网络名称 [回车随机生成]: " input_user
+        CFG_USER="${input_user:-$(generate_uuid)}"
     fi
 
-    if [[ -n "$network_secret" ]]; then
+    if [[ -n "${network_secret:-}" ]]; then
         CFG_PASSWORD="$network_secret"
         echo -e "${GREEN}✔ 已从环境变量读取网络密钥。${NC}"
     else
-        read -p "请输入网络密钥 [回车随机生成]: " input_password
-        CFG_PASSWORD=${input_password:-$(generate_uuid)}
+        read -r -p "请输入网络密钥 [回车随机生成]: " input_password
+        CFG_PASSWORD="${input_password:-$(generate_uuid)}"
     fi
-    
-    if [[ -n "$node" ]]; then
+
+    if [[ -n "${node:-}" ]]; then
         CFG_NODE="$node"
         echo -e "${GREEN}✔ 已从环境变量读取注册中心节点: ${CFG_NODE}${NC}"
     else
@@ -181,13 +182,15 @@ create_network_service() {
             CFG_NODE="tcp://public.easytier.cn:11010"
             echo -e "${GREEN}✔ 未指定 'node'，已使用默认注册中心节点。${NC}"
         else
-            read -p "请输入注册中心节点 [默认: tcp://public.easytier.cn:11010]: " input_node
-            CFG_NODE=${input_node:-"tcp://public.easytier.cn:11010"}
+            read -r -p "请输入注册中心节点 [默认: tcp://public.easytier.cn:11010]: " input_node
+            CFG_NODE="${input_node:-tcp://public.easytier.cn:11010}"
         fi
     fi
-    
+
     save_config
+
     local full_command="${INSTALL_DIR}/easytier-core --ipv4 ${CFG_IPV4} --network-name ${CFG_USER} --network-secret ${CFG_PASSWORD} -p ${CFG_NODE}"
+
     echo -e "${GREEN}正在创建服务文件...${NC}"
     cat > "$SERVICE_FILE" << EOF
 [Unit]
@@ -202,6 +205,7 @@ LimitNOFILE=65535
 [Install]
 WantedBy=multi-user.target
 EOF
+
     echo -e "${GREEN}正在重载 systemd 并启动服务...${NC}"
     systemctl daemon-reload
     systemctl restart "${SERVICE_NAME}"
@@ -209,7 +213,7 @@ EOF
     if systemctl is-active --quiet "${SERVICE_NAME}"; then
         echo -e "${GREEN}✔ 服务 '${SERVICE_NAME}' 已成功启动。${NC}"
         if [[ "$mode" == "non_interactive" ]]; then
-            if [[ "$auto_start" == "n" ]]; then
+            if [[ "${auto_start:-}" == "n" ]]; then
                 systemctl disable "${SERVICE_NAME}"
                 echo -e "${YELLOW}根据 'auto_start=n' 参数，已取消开机自启。${NC}"
             else
@@ -217,7 +221,7 @@ EOF
                 echo -e "${GREEN}根据 'auto_start' 参数 (或默认)，已设置为开机自启。${NC}"
             fi
         else
-            read -p "是否设置为开机自启? [Y/n]: " confirm_autostart
+            read -r -p "是否设置为开机自启? [Y/n]: " confirm_autostart
             if [[ "$confirm_autostart" =~ ^[Nn]$ ]]; then
                 systemctl disable "${SERVICE_NAME}"
                 echo -e "${YELLOW}已取消开机自启。${NC}"
@@ -228,15 +232,15 @@ EOF
         fi
     else
         echo -e "${RED}❌ 服务启动失败! 请执行选项 4 查看详细错误。${NC}"
+        return 1
     fi
 }
 
-# 3. 系统服务：加入网络
 join_network_service() {
     local mode="$1"
     local join_command_env="$2"
     echo -e "${BLUE}--- 3. 系统服务：加入网络 ---${NC}"
-    if ! command -v easytier-core &> /dev/null; then
+    if ! command -v easytier-core &>/dev/null; then
         echo -e "${RED}错误: 'easytier-core' 未安装。请先执行选项 1。${NC}"
         return 1
     fi
@@ -246,9 +250,9 @@ join_network_service() {
         join_command="$join_command_env"
     else
         echo -e "${YELLOW}请粘贴完整的客户端连接命令...:${NC}"
-        read -p "> " join_command
+        read -r -p "> " join_command
     fi
-    if [[ ! "$join_command" == *"easytier-core"* ]]; then
+    if [[ "$join_command" != *"easytier-core"* ]]; then
         echo -e "${RED}错误: 输入的不是一个有效的 easytier-core 命令。${NC}"
         return 1
     fi
@@ -275,7 +279,7 @@ EOF
     if systemctl is-active --quiet "${SERVICE_NAME}"; then
         echo -e "${GREEN}✔ 服务 '${SERVICE_NAME}' 已成功启动。${NC}"
         if [[ "$mode" == "non_interactive" ]]; then
-            if [[ "$auto_start" == "n" ]]; then
+            if [[ "${auto_start:-}" == "n" ]]; then
                 systemctl disable "${SERVICE_NAME}"
                 echo -e "${YELLOW}根据 'auto_start=n' 参数，已取消开机自启。${NC}"
             else
@@ -283,7 +287,7 @@ EOF
                 echo -e "${GREEN}根据 'auto_start' 参数 (或默认)，已设置为开机自启。${NC}"
             fi
         else
-            read -p "是否设置为开机自启? [Y/n]: " confirm_autostart
+            read -r -p "是否设置为开机自启? [Y/n]: " confirm_autostart
             if [[ "$confirm_autostart" =~ ^[Nn]$ ]]; then
                 systemctl disable "${SERVICE_NAME}"
                 echo -e "${YELLOW}已取消开机自启。${NC}"
@@ -294,11 +298,10 @@ EOF
         fi
     else
         echo -e "${RED}❌ 服务启动失败! 请执行选项 4 查看详细错误。${NC}"
+        return 1
     fi
-    return 0
 }
 
-# 4. 查看服务运行状态
 view_service_status() {
     echo -e "${BLUE}--- 4. 查看服务运行状态 (systemctl) ---${NC}"
     if [ ! -f "$SERVICE_FILE" ]; then
@@ -308,10 +311,9 @@ view_service_status() {
     systemctl --no-pager status "${SERVICE_NAME}"
 }
 
-# 5. 查看内网节点
 view_pool_ips() {
     echo -e "${BLUE}--- 5. 查看内网节点 ---${NC}"
-    if ! command -v easytier-cli &> /dev/null; then
+    if ! command -v easytier-cli &>/dev/null; then
         echo -e "${RED}错误: 'easytier-cli' 未安装。${NC}"
         return
     fi
@@ -326,8 +328,8 @@ view_pool_ips() {
         return
     fi
     local public_servers; local ip_nodes; local local_ip
-    public_servers=$(echo -e "$clean_list" | grep "PublicServer")
-    ip_nodes=$(echo -e "$clean_list" | grep -v "PublicServer")
+    public_servers=$(echo -e "$clean_list" | grep "PublicServer" || true)
+    ip_nodes=$(echo -e "$clean_list" | grep -v "PublicServer" || true)
     local_ip=$(get_local_virtual_ip)
     echo -e "${CYAN}当前内网节点列表:${NC}"
     if [ -n "$public_servers" ]; then
@@ -338,10 +340,9 @@ view_pool_ips() {
     fi
 }
 
-# 6. 查看节点路由列表
 view_routes() {
     echo -e "${BLUE}--- 6. 查看节点路由列表 (完整信息) ---${NC}"
-    if ! command -v easytier-cli &> /dev/null; then
+    if ! command -v easytier-cli &>/dev/null; then
         echo -e "${RED}错误: 'easytier-cli' 未安装。${NC}"
         return
     fi
@@ -352,7 +353,6 @@ view_routes() {
     easytier-cli route
 }
 
-# 7. 查看本机启动命令
 view_startup_command() {
     echo -e "${BLUE}--- 7. 查看本机启动命令 ---${NC}"
     if [ ! -f "$SERVICE_FILE" ]; then
@@ -369,35 +369,48 @@ view_startup_command() {
     fi
 }
 
-# 8. 生成客户端连接命令
 generate_client_command() {
     echo -e "${BLUE}--- 8. 生成客户端连接命令 (用于新网络) ---${NC}"
-    local network_name=""; local network_secret=""; local peer_node=""; local base_ip=""
+    local network_name="" network_secret="" peer_node="" base_ip=""
     if source "$CONFIG_FILE" 2>/dev/null; then
-        echo -e "${CYAN}INFO: 使用配置文件中的网络参数。${NC}"; network_name=$CFG_USER; network_secret=$CFG_PASSWORD; peer_node=$CFG_NODE; base_ip=$CFG_IPV4
+        echo -e "${CYAN}INFO: 使用配置文件中的网络参数。${NC}"
+        network_name="$CFG_USER"
+        network_secret="$CFG_PASSWORD"
+        peer_node="$CFG_NODE"
+        base_ip="$CFG_IPV4"
     elif [ -f "$SERVICE_FILE" ]; then
-        echo -e "${CYAN}INFO: 未找到配置文件，正在从当前服务解析网络参数...${NC}"; local command; command=$(grep 'ExecStart=' "$SERVICE_FILE" | sed 's/ExecStart=//')
-        network_name=$(echo "$command" | awk '{for(i=1;i<=NF;i++) if($i=="--network-name") print $(i+1)}'); network_secret=$(echo "$command" | awk '{for(i=1;i<=NF;i++) if($i=="--network-secret") print $(i+1)}'); peer_node=$(echo "$command" | awk '{for(i=1;i<=NF;i++) if($i=="-p") print $(i+1)}'); base_ip=$(get_local_virtual_ip)
+        echo -e "${CYAN}INFO: 未找到配置文件，正在从当前服务解析网络参数...${NC}"
+        local command
+        command=$(grep 'ExecStart=' "$SERVICE_FILE" | sed 's/ExecStart=//')
+        network_name=$(echo "$command" | awk '{for(i=1;i<=NF;i++) if($i=="--network-name") print $(i+1)}')
+        network_secret=$(echo "$command" | awk '{for(i=1;i<=NF;i++) if($i=="--network-secret") print $(i+1)}')
+        peer_node=$(echo "$command" | awk '{for(i=1;i<=NF;i++) if($i=="-p") print $(i+1)}')
+        base_ip=$(get_local_virtual_ip)
     else
-        echo -e "${RED}错误: 找不到配置文件，且服务也未安装。无法生成命令。${NC}"; return
+        echo -e "${RED}错误: 找不到配置文件，且服务也未安装。无法生成命令。${NC}"
+        return
     fi
-    if [ -z "$network_name" ] || [ -z "$network_secret" ] || [ -z "$peer_node" ] || [ -z "$base_ip" ]; then echo -e "${RED}错误: 未能从服务中获取全部所需的网络参数。${NC}"; return; fi
-    local server_ip_base; local server_ip_last; server_ip_base=$(echo "$base_ip" | cut -d'.' -f1-3); server_ip_last=$(echo "$base_ip" | cut -d'.' -f4)
-    read -p "请输入客户端 IP 的末尾数字 (2-254) [回车不指定]: " client_last_octet
-    local client_command; client_command="easytier-core -d --network-name ${network_name} --network-secret ${network_secret} -p ${peer_node}"
+    if [ -z "$network_name" ] || [ -z "$network_secret" ] || [ -z "$peer_node" ] || [ -z "$base_ip" ]; then
+        echo -e "${RED}错误: 未能从服务中获取全部所需的网络参数。${NC}"
+        return
+    fi
+    local server_ip_base server_ip_last client_last_octet client_ip client_command
+    server_ip_base=$(echo "$base_ip" | cut -d'.' -f1-3)
+    server_ip_last=$(echo "$base_ip" | cut -d'.' -f4)
+    read -r -p "请输入客户端 IP 的末尾数字 (2-254) [回车不指定]: " client_last_octet
+    client_command="easytier-core -d --network-name ${network_name} --network-secret ${network_secret} -p ${peer_node}"
     if [ -n "$client_last_octet" ]; then
         if [[ "$client_last_octet" == "$server_ip_last" ]]; then
             echo -e "${RED}错误: 客户端 IP 末尾不能与服务端 (${server_ip_last}) 相同。${NC}"
             return
         fi
-        local client_ip="${server_ip_base}.${client_last_octet}"
+        client_ip="${server_ip_base}.${client_last_octet}"
         client_command="${client_command} --ipv4 ${client_ip}"
     fi
     echo -e "\n${GREEN}生成的客户端连接命令是:${NC}"
     echo -e "${YELLOW}${client_command}${NC}"
 }
 
-# 9. 关闭开机自启
 disable_autostart() {
     echo -e "${BLUE}--- 9. 关闭开机自启 ---${NC}"
     if [ ! -f "$SERVICE_FILE" ]; then
@@ -412,7 +425,6 @@ disable_autostart() {
     fi
 }
 
-# 10. 关闭 EasyTier 服务
 stop_service() {
     echo -e "${BLUE}--- 10. 关闭 EasyTier 服务 ---${NC}"
     if [ ! -f "$SERVICE_FILE" ]; then
@@ -425,17 +437,16 @@ stop_service() {
     echo -e "${YELLOW}提示: 开机自启状态未改变，若需关闭请使用选项 9。${NC}"
 }
 
-# 99. 彻底卸载 EasyTier
 uninstall_easytier() {
     echo -e "${YELLOW}--- 99. 彻底卸载 EasyTier ---${NC}"
     echo -e "${GREEN}正在停止并删除系统服务...${NC}"
-    systemctl stop "${SERVICE_NAME}" 2>/dev/null
-    systemctl disable "${SERVICE_NAME}" 2>/dev/null
+    systemctl stop "${SERVICE_NAME}" 2>/dev/null || true
+    systemctl disable "${SERVICE_NAME}" 2>/dev/null || true
     rm -f "$SERVICE_FILE"
     systemctl daemon-reload
     echo -e "${GREEN}正在删除可执行文件...${NC}"
     rm -f "${INSTALL_DIR}/easytier-core" "${INSTALL_DIR}/easytier-cli"
-    read -p "是否删除所有配置文件 (${CONFIG_DIR})? [y/N]: " confirm_delete_config
+    read -r -p "是否删除所有配置文件 (${CONFIG_DIR})? [y/N]: " confirm_delete_config
     if [[ "$confirm_delete_config" =~ ^[Yy]$ ]]; then
         echo -e "${GREEN}正在删除配置文件目录...${NC}"
         rm -rf "$CONFIG_DIR"
@@ -447,7 +458,6 @@ uninstall_easytier() {
     echo -e "\n${GREEN}✔ EasyTier 已彻底卸载。${NC}"
 }
 
-# 100. 卸载 'easy' 快捷命令
 uninstall_easy_command() {
     echo -e "${BLUE}--- 100. 卸载 'easy' 快捷命令 ---${NC}"
     if [ -f "$EASY_COMMAND_PATH" ]; then
@@ -459,7 +469,6 @@ uninstall_easy_command() {
     fi
 }
 
-# 状态概览面板
 display_status_dashboard() {
     local install_status_text="${RED}未安装${NC}"
     if [ -f "${INSTALL_DIR}/easytier-core" ]; then
@@ -500,7 +509,6 @@ display_status_dashboard() {
     echo -e "${BLUE}===================================${NC}"
 }
 
-# 显示主菜单
 show_menu() {
     display_status_dashboard
     echo -e "${BLUE}========== EasyTier 管理面板 V7.0 ==========${NC}"
@@ -519,15 +527,14 @@ show_menu() {
     echo -e " ${RED}99. 彻底卸载 EasyTier${NC}"
     echo -e " ${RED}100. 卸载 'easy' 快捷命令${NC}"
     echo -e " ${RED}0. 退出脚本${NC}"
-    echo -e "${BLUE}===========================================${NC}"
-    read -p "请输入选项 [0-100]: " choice
+    echo -ne "请输入选项 [0-100]: "
+    read -r choice
 }
 
 # --- 主程序执行 ---
 check_root
 
-# 检查是否为“新建网络”非交互模式 (使用环境变量)
-if [[ -n "$ipv4" || -n "$network_name" || -n "$network_secret" ]]; then
+if [[ -n "${ipv4:-}" || -n "${network_name:-}" || -n "${network_secret:-}" ]]; then
     echo -e "${YELLOW}检测到 '新建网络' 参数，进入非交互模式...${NC}"
     install_easytier && create_network_service "non_interactive"
     echo -e "\n${GREEN}✔ 非交互式任务执行完毕。${NC}"
@@ -536,8 +543,7 @@ if [[ -n "$ipv4" || -n "$network_name" || -n "$network_secret" ]]; then
     exit 0
 fi
 
-# 检查是否为“加入网络”非交互模式 (使用环境变量)
-if [ -n "$join" ]; then
+if [[ -n "${join:-}" ]]; then
     echo -e "${YELLOW}检测到 'join' 参数，进入非交互模式...${NC}"
     install_easytier && join_network_service "non_interactive" "$join"
     echo -e "\n${GREEN}✔ 非交互式任务执行完毕。${NC}"
@@ -546,16 +552,14 @@ if [ -n "$join" ]; then
     exit 0
 fi
 
-# 仅在直接运行脚本文件时（而不是通过`easy`命令），才执行此更新
 if [[ "$0" != "$EASY_COMMAND_PATH" ]]; then
     update_easy_command
 fi
 
-# 进入面板管理模式
 while true; do
     clear
     show_menu
-    case $choice in
+    case "$choice" in
         1) install_easytier ;;
         2) create_network_service "interactive" ;;
         3) join_network_service "interactive" "" ;;
@@ -571,5 +575,6 @@ while true; do
         0) echo -e "${GREEN}退出脚本。${NC}"; exit 0 ;;
         *) echo -e "${RED}无效选项，请重新输入。${NC}" ;;
     esac
-    read -p $'\n按回车键返回主菜单...'
+    echo -ne "\n按回车键返回主菜单..."
+    read -r
 done
