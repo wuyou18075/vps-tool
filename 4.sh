@@ -3,11 +3,11 @@ set -euo pipefail
 IFS=$'\n\t'
 
 #================================================================
-# EasyTier 交互式一键安装与管理脚本 V7.3 (纯净版)
+# EasyTier 交互式一键安装与管理脚本 V7.4 (流程优化版)
 #
 # 作者: Gemini @ Google
-# 版本: 7.3 (2025-07-06)
-# 备注: 根据要求，在非交互模式下禁用'easy'命令的自动安装。
+# 版本: 7.4 (2025-07-06)
+# 备注: 优化非交互模式，结束后直接进入管理面板，并修复交互提示。
 #================================================================
 
 # --- 颜色定义 ---
@@ -81,7 +81,6 @@ save_config() {
 
 update_easy_command() {
     echo -e "${YELLOW}正在安装/更新 'easy' 快捷命令...${NC}"
-    # 使用 cp 命令复制脚本自身，确保可执行
     if ! cp "$0" "$EASY_COMMAND_PATH"; then
         echo -e "${RED}❌ 'easy' 命令复制失败! 请检查 ${INSTALL_DIR} 目录权限。${NC}"
         return 1
@@ -387,16 +386,27 @@ view_startup_command() {
 }
 
 generate_client_command() {
-    echo -e "${BLUE}--- 8. 生成客户端连接命令 (用于新网络) ---${NC}"
+    local mode="${1:-interactive}" # 默认为交互模式
+
+    if [[ "$mode" == "interactive" ]]; then
+        echo -e "${BLUE}--- 8. 生成客户端连接命令 (用于新网络) ---${NC}"
+    else
+        echo -e "${BLUE}--- 生成客户端连接命令 ---${NC}"
+    fi
+
     local network_name="" network_secret="" peer_node="" base_ip=""
     if source "$CONFIG_FILE" 2>/dev/null; then
-        echo -e "${CYAN}INFO: 使用配置文件中的网络参数。${NC}"
+        if [[ "$mode" == "interactive" ]]; then # 只在交互模式下显示INFO
+             echo -e "${CYAN}INFO: 使用配置文件中的网络参数。${NC}"
+        fi
         network_name="$CFG_USER"
         network_secret="$CFG_PASSWORD"
         peer_node="$CFG_NODE"
         base_ip="$CFG_IPV4"
     elif [ -f "$SERVICE_FILE" ]; then
-        echo -e "${CYAN}INFO: 未找到配置文件，正在从当前服务解析网络参数...${NC}"
+        if [[ "$mode" == "interactive" ]]; then
+             echo -e "${CYAN}INFO: 未找到配置文件，正在从当前服务解析网络参数...${NC}"
+        fi
         local command
         command=$(grep 'ExecStart=' "$SERVICE_FILE" | sed 's/ExecStart=//')
         network_name=$(echo "$command" | awk '{for(i=1;i<=NF;i++) if($i=="--network-name") print $(i+1)}')
@@ -416,8 +426,8 @@ generate_client_command() {
     server_ip_last=$(echo "$base_ip" | cut -d'.' -f4)
     client_last_octet=""
     
-    # 仅在交互式终端下提示输入
-    if [ -t 0 ]; then
+    # 仅在交互模式下提示输入
+    if [[ "$mode" == "interactive" ]]; then
         read -r -p "请输入客户端 IP 的末尾数字 (2-254) [回车不指定]: " client_last_octet
     fi
 
@@ -543,7 +553,7 @@ display_status_dashboard() {
 
 show_menu() {
     display_status_dashboard
-    echo -e "${BLUE}======== EasyTier 管理面板 V7.3 ==========${NC}"
+    echo -e "${BLUE}======== EasyTier 管理面板 V7.4 ==========${NC}"
     echo -e " ${GREEN}1. 安装/更新 EasyTier${NC}"
     echo -e " ${GREEN}2. 系统服务：新建网络${NC}"
     echo -e " ${GREEN}3. 系统服务：加入网络${NC}"
@@ -566,30 +576,39 @@ show_menu() {
 # --- 主程序执行 ---
 check_root
 
+non_interactive_run_completed=false
+
 if [[ -n "${ipv4:-}" || -n "${network_name:-}" || -n "${network_secret:-}" ]]; then
     echo -e "${YELLOW}检测到 '新建网络' 参数，进入非交互模式...${NC}"
     install_easytier && create_network_service "non_interactive" && {
         echo -e "\n${GREEN}✔ 非交互式任务执行完毕。${NC}"
-        generate_client_command
+        generate_client_command "non_interactive"
+        non_interactive_run_completed=true
     }
-    exit 0
 fi
 
-if [[ -n "${join:-}" ]]; then
+if [[ -n "${join:-}" && "$non_interactive_run_completed" == false ]]; then
     echo -e "${YELLOW}检测到 'join' 参数，进入非交互模式...${NC}"
     install_easytier && join_network_service "non_interactive" "$join" && {
       echo -e "\n${GREEN}✔ 非交互式任务执行完毕。${NC}"
+      non_interactive_run_completed=true
     }
-    exit 0
 fi
 
-# 如果是通过URL下载后直接执行，且是首次，提示用户可以安装快捷命令
-if [[ "$(basename "$0")" != "easy" && "$0" != "$EASY_COMMAND_PATH" && ! -f "$EASY_COMMAND_PATH" ]]; then
-    echo -e "${YELLOW}>>> 检测到您还未安装 'easy' 快捷命令。${NC}"
-    echo -e "${YELLOW}>>> 安装后，您可以在任何路径下使用 'sudo easy' 打开此面板。${NC}"
-    read -r -p "是否立即安装? [Y/n]: " install_easy_now
-    if [[ ! "$install_easy_now" =~ ^[Nn]$ ]]; then
-        update_easy_command
+# 如果刚刚执行了非交互安装，则暂停并提示按回车继续
+if [[ "$non_interactive_run_completed" == true ]]; then
+    echo -e "\n${YELLOW}非交互式安装已完成。${NC}"
+    echo -ne "按回车键进入管理面板..."
+    read -r
+else
+    # 否则，如果是首次交互式运行，提示安装快捷命令
+    if [[ "$(basename "$0")" != "easy" && "$0" != "$EASY_COMMAND_PATH" && ! -f "$EASY_COMMAND_PATH" ]]; then
+        echo -e "${YELLOW}>>> 检测到您还未安装 'easy' 快捷命令。${NC}"
+        echo -e "${YELLOW}>>> 安装后，您可以在任何路径下使用 'sudo easy' 打开此面板。${NC}"
+        read -r -p "是否立即安装? [Y/n]: " install_easy_now
+        if [[ ! "$install_easy_now" =~ ^[Nn]$ ]]; then
+            update_easy_command
+        fi
     fi
 fi
 
@@ -603,8 +622,8 @@ while true; do
         4) view_service_status ;;
         5) view_pool_ips ;;
         6) view_routes ;;
-        7.1) view_startup_command ;;
-        8) generate_client_command ;;
+        7) view_startup_command ;;
+        8) generate_client_command "interactive" ;;
         9) manage_easy_command ;;
         10) manage_autostart ;;
         11) stop_service ;;
