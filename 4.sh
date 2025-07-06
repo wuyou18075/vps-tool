@@ -3,11 +3,11 @@ set -euo pipefail
 IFS=$'\n\t'
 
 #================================================================
-# EasyTier 交互式一键安装与管理脚本 V8.0 (自动注册版)
+# EasyTier 交互式一键安装与管理脚本 V7.2 (优化提示版)
 #
 # 作者: Gemini @ Google
-# 版本: 8.0 (2025-07-06)
-# 备注: 采用了更高效的自动注册命令逻辑
+# 版本: 7.2 (2025-07-06)
+# 备注: 优化了快捷命令安装后的提示信息
 #================================================================
 
 # --- 颜色定义 ---
@@ -20,46 +20,16 @@ NC='\033[0m'
 
 # --- 路径定义 ---
 INSTALL_DIR="/usr/local/bin"
-COMMAND_NAME="easy"
-EASY_COMMAND_PATH="${INSTALL_DIR}/${COMMAND_NAME}"
+EASY_COMMAND_PATH="${INSTALL_DIR}/easy"
 CONFIG_DIR="/etc/easytier"
 CONFIG_FILE="${CONFIG_DIR}/easy.conf"
 SERVICE_NAME="easytier-custom"
 SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
 
-# --- 自动注册逻辑 ---
-# 检查脚本是否通过其最终安装路径运行。如果不是，则执行“自我安装”。
-if [[ "$(basename "$0")" != "$COMMAND_NAME" ]] || [[ "$0" != "$EASY_COMMAND_PATH" ]]; then
-    echo -e "${YELLOW}检测到正在运行原始脚本，将自动注册 '${COMMAND_NAME}' 命令...${NC}"
-    # 如果当前用户不是root，则使用sudo来提权进行安装
-    if [[ $EUID -ne 0 ]]; then
-        echo "需要管理员权限来注册命令，请输入您的密码..."
-        if sudo cp -f "$0" "$EASY_COMMAND_PATH" && sudo chmod +x "$EASY_COMMAND_PATH"; then
-             echo -e "${GREEN}✔ 命令 '${COMMAND_NAME}' 已成功注册至 ${EASY_COMMAND_PATH}${NC}"
-             echo -e "${YELLOW}请注意: 要想立即使用, 请执行 ${CYAN}hash -r${YELLOW} 或重新登录终端。${NC}"
-        else
-            echo -e "${RED}❌ 注册失败。${NC}"
-            exit 1
-        fi
-    # 如果当前用户是root，则直接安装
-    else
-        if cp -f "$0" "$EASY_COMMAND_PATH" && chmod +x "$EASY_COMMAND_PATH"; then
-            echo -e "${GREEN}✔ 命令 '${COMMAND_NAME}' 已成功注册至 ${EASY_COMMAND_PATH}${NC}"
-            echo -e "${YELLOW}您现在可以在任何位置通过 'sudo ${COMMAND_NAME}' 来使用本脚本了。${NC}"
-        else
-            echo -e "${RED}❌ 注册失败。${NC}"
-            exit 1
-        fi
-    fi
-    # 注册完成后退出，避免执行后续的主逻辑
-    exit 0
-fi
-
-
 # --- 辅助函数 ---
 check_root() {
     if [ "$(id -u)" -ne 0 ]; then
-        echo -e "${RED}错误: 此脚本需要以 root 权限运行。请使用 'sudo easy'。${NC}"
+        echo -e "${RED}错误: 此脚本需要以 root 权限运行。${NC}"
         exit 1
     fi
 }
@@ -109,6 +79,37 @@ save_config() {
     } > "$CONFIG_FILE"
 }
 
+update_easy_command() {
+    echo -e "${YELLOW}正在安装/更新 'easy' 快捷命令至当前版本...${NC}"
+    if ! cp "$0" "$EASY_COMMAND_PATH"; then
+        echo -e "${RED}❌ 'easy' 命令复制失败! 请检查 ${INSTALL_DIR} 目录权限。${NC}"
+        return 1
+    fi
+    if ! chmod +x "$EASY_COMMAND_PATH"; then
+        echo -e "${RED}❌ 'easy' 命令授权失败!${NC}"
+        return 1
+    fi
+    
+    if [[ "${1:-}" != "non_interactive_first_run" ]]; then
+       echo -e "${GREEN}✔ 'easy' 快捷命令已安装/更新。${NC}"
+       echo -e "${YELLOW}请注意: 要想在当前窗口立即使用 'easy' 命令, 请执行 ${CYAN}hash -r${YELLOW} 命令, 或直接重新登录SSH。${NC}"
+    fi
+}
+
+uninstall_easy_command() {
+    echo -e "${BLUE}--- 卸载 'easy' 快捷命令 ---${NC}"
+    if [ -f "$EASY_COMMAND_PATH" ]; then
+        if rm -f "$EASY_COMMAND_PATH"; then
+            echo -e "${GREEN}✔ 快捷命令 'easy' 已成功卸载。${NC}"
+            echo -e "${YELLOW}您可能需要重新打开终端或执行 ${CYAN}hash -r${YELLOW} 使其在当前窗口完全失效。${NC}"
+        else
+            echo -e "${RED}❌ 快捷命令 'easy' 卸载失败。${NC}"
+        fi
+    else
+        echo -e "${YELLOW}快捷命令 'easy' 未安装，无需卸载。${NC}"
+    fi
+}
+
 # --- 核心功能函数 ---
 
 install_easytier() {
@@ -156,13 +157,13 @@ install_easytier() {
 }
 
 create_network_service() {
+    local mode="$1"
     echo -e "${BLUE}--- 2. 系统服务：新建网络 ---${NC}"
     if ! command -v easytier-core &>/dev/null; then
         echo -e "${RED}错误: 'easytier-core' 未安装。请先执行选项 1。${NC}"
         return 1
     fi
 
-    # 此函数不需要传递 'mode' 参数了，因为非交互模式在主程序逻辑中已处理
     if [[ -n "${ipv4:-}" ]]; then
         CFG_IPV4="$ipv4"
         echo -e "${GREEN}✔ 已从环境变量读取虚拟地址: ${CFG_IPV4}${NC}"
@@ -196,8 +197,13 @@ create_network_service() {
         CFG_NODE="$node"
         echo -e "${GREEN}✔ 已从环境变量读取注册中心节点: ${CFG_NODE}${NC}"
     else
-        read -r -p "请输入注册中心节点 [默认: tcp://public.easytier.cn:11010]: " input_node
-        CFG_NODE="${input_node:-tcp://public.easytier.cn:11010}"
+        if [[ "$mode" == "non_interactive" ]]; then
+            CFG_NODE="tcp://public.easytier.cn:11010"
+            echo -e "${GREEN}✔ 未指定 'node'，已使用默认注册中心节点。${NC}"
+        else
+            read -r -p "请输入注册中心节点 [默认: tcp://public.easytier.cn:11010]: " input_node
+            CFG_NODE="${input_node:-tcp://public.easytier.cn:11010}"
+        fi
     fi
 
     save_config
@@ -225,16 +231,23 @@ create_network_service() {
     sleep 2
     if systemctl is-active --quiet "${SERVICE_NAME}"; then
         echo -e "${GREEN}✔ 服务 '${SERVICE_NAME}' 已成功启动。${NC}"
-        # 非交互模式下的开机自启逻辑由主程序处理
-        if [[ -z "${ipv4:-}" && -z "${network_name:-}" ]]; then
-             read -r -p "是否设置为开机自启? [Y/n]: " confirm_autostart
-             if [[ "$confirm_autostart" =~ ^[Nn]$ ]]; then
-                 systemctl disable "${SERVICE_NAME}"
-                 echo -e "${YELLOW}已取消开机自启。${NC}"
-             else
-                 systemctl enable "${SERVICE_NAME}"
-                 echo -e "${GREEN}已设置为开机自启。${NC}"
-             fi
+        if [[ "$mode" == "non_interactive" ]]; then
+            if [[ "${auto_start:-}" == "n" ]]; then
+                systemctl disable "${SERVICE_NAME}"
+                echo -e "${YELLOW}根据 'auto_start=n' 参数，已取消开机自启。${NC}"
+            else
+                systemctl enable "${SERVICE_NAME}"
+                echo -e "${GREEN}根据 'auto_start' 参数 (或默认)，已设置为开机自启。${NC}"
+            fi
+        else
+            read -r -p "是否设置为开机自启? [Y/n]: " confirm_autostart
+            if [[ "$confirm_autostart" =~ ^[Nn]$ ]]; then
+                systemctl disable "${SERVICE_NAME}"
+                echo -e "${YELLOW}已取消开机自启。${NC}"
+            else
+                systemctl enable "${SERVICE_NAME}"
+                echo -e "${GREEN}已设置为开机自启。${NC}"
+            fi
         fi
     else
         echo -e "${RED}❌ 服务启动失败! 请执行选项 4 查看详细错误。${NC}"
@@ -243,15 +256,17 @@ create_network_service() {
 }
 
 join_network_service() {
+    local mode="$1"
+    local join_command_env="$2"
     echo -e "${BLUE}--- 3. 系统服务：加入网络 ---${NC}"
     if ! command -v easytier-core &>/dev/null; then
         echo -e "${RED}错误: 'easytier-core' 未安装。请先执行选项 1。${NC}"
         return 1
     fi
     local join_command=""
-    if [[ -n "${join:-}" ]]; then
+    if [ -n "$join_command_env" ]; then
         echo -e "${GREEN}检测到外部传入的 join 命令。${NC}"
-        join_command="${join}"
+        join_command="$join_command_env"
     else
         echo -e "${YELLOW}请粘贴完整的客户端连接命令...:${NC}"
         read -r -p "> " join_command
@@ -283,7 +298,15 @@ join_network_service() {
     sleep 2
     if systemctl is-active --quiet "${SERVICE_NAME}"; then
         echo -e "${GREEN}✔ 服务 '${SERVICE_NAME}' 已成功启动。${NC}"
-        if [[ -z "${join:-}" ]]; then
+        if [[ "$mode" == "non_interactive" ]]; then
+            if [[ "${auto_start:-}" == "n" ]]; then
+                systemctl disable "${SERVICE_NAME}"
+                echo -e "${YELLOW}根据 'auto_start=n' 参数，已取消开机自启。${NC}"
+            else
+                systemctl enable "${SERVICE_NAME}"
+                echo -e "${GREEN}根据 'auto_start' 参数 (或默认)，已设置为开机自启。${NC}"
+            fi
+        else
             read -r -p "是否设置为开机自启? [Y/n]: " confirm_autostart
             if [[ "$confirm_autostart" =~ ^[Nn]$ ]]; then
                 systemctl disable "${SERVICE_NAME}"
@@ -408,8 +431,18 @@ generate_client_command() {
     echo -e "${YELLOW}${client_command}${NC}"
 }
 
+manage_easy_command() {
+    echo -e "${BLUE}--- 9. 设置 'easy' 快捷命令 ---${NC}"
+    read -r -p "是否启用 'easy' 快捷命令? (y: 启用 / n: 禁用) [Y/n]: " choice
+    if [[ "$choice" =~ ^[Nn]$ ]]; then
+        uninstall_easy_command
+    else
+        update_easy_command
+    fi
+}
+
 manage_autostart() {
-    echo -e "${BLUE}--- 9. 设置开机自启 ---${NC}"
+    echo -e "${BLUE}--- 10. 设置开机自启 ---${NC}"
     if [ ! -f "$SERVICE_FILE" ]; then
         echo -e "${YELLOW}警告: 服务文件不存在，无法进行设置。${NC}"
         return
@@ -433,7 +466,7 @@ manage_autostart() {
 }
 
 stop_service() {
-    echo -e "${BLUE}--- 10. 关闭 EasyTier 服务 ---${NC}"
+    echo -e "${BLUE}--- 11. 关闭 EasyTier 服务 ---${NC}"
     if [ ! -f "$SERVICE_FILE" ]; then
         echo -e "${YELLOW}警告: 服务文件不存在，无需操作。${NC}"
         return
@@ -441,7 +474,7 @@ stop_service() {
     echo -e "${GREEN}正在停止服务...${NC}"
     systemctl stop "${SERVICE_NAME}" 2>/dev/null
     echo -e "${GREEN}✔ EasyTier 服务已停止。${NC}"
-    echo -e "${YELLOW}提示: 开机自启状态未改变，若需调整请使用选项 9。${NC}"
+    echo -e "${YELLOW}提示: 开机自启状态未改变，若需调整请使用选项 10。${NC}"
 }
 
 uninstall_easytier() {
@@ -459,7 +492,7 @@ uninstall_easytier() {
         rm -rf "$CONFIG_DIR"
     fi
     if [ -f "$EASY_COMMAND_PATH" ]; then
-        echo -e "${GREEN}正在删除 '${COMMAND_NAME}' 快捷命令...${NC}"
+        echo -e "${GREEN}正在删除 'easy' 快捷命令...${NC}"
         rm -f "$EASY_COMMAND_PATH"
     fi
     echo -e "\n${GREEN}✔ EasyTier 已彻底卸载。${NC}"
@@ -507,7 +540,7 @@ display_status_dashboard() {
 
 show_menu() {
     display_status_dashboard
-    echo -e "${BLUE}======== EasyTier 管理面板 V8.0 ==========${NC}"
+    echo -e "${BLUE}======== EasyTier 管理面板 V7.2 ==========${NC}"
     echo -e " ${GREEN}1. 安装/更新 EasyTier${NC}"
     echo -e " ${GREEN}2. 系统服务：新建网络${NC}"
     echo -e " ${GREEN}3. 系统服务：加入网络${NC}"
@@ -518,8 +551,9 @@ show_menu() {
     echo -e " ${CYAN}7. 查看本机启动命令${NC}"
     echo -e " ${CYAN}8. 生成客户端连接命令${NC}"
     echo -e "------------------------------------"
-    echo -e " ${YELLOW}9. 设置开机自启${NC}"
-    echo -e " ${RED}10. 关闭 EasyTier 服务${NC}"
+    echo -e " ${YELLOW}9. 设置 'easy' 快捷命令${NC}"
+    echo -e " ${YELLOW}10. 设置开机自启${NC}"
+    echo -e " ${RED}11. 关闭 EasyTier 服务${NC}"
     echo -e " ${RED}99. 彻底卸载 EasyTier${NC}"
     echo -e " ${RED}0. 退出脚本${NC}"
     echo -ne "请输入选项 [0-99]: "
@@ -527,58 +561,50 @@ show_menu() {
 }
 
 # --- 主程序执行 ---
-
-# 检查 root 权限，因为所有核心功能都需要它
 check_root
 
-# 非交互模式：通过环境变量一键创建网络
 if [[ -n "${ipv4:-}" || -n "${network_name:-}" || -n "${network_secret:-}" ]]; then
     echo -e "${YELLOW}检测到 '新建网络' 参数，进入非交互模式...${NC}"
-    install_easytier
-    create_network_service
-    # 在非交互模式下，根据 auto_start 环境变量决定是否开机启动
-    if [[ "${auto_start:-}" == "n" ]]; then
-        systemctl disable "${SERVICE_NAME}"
-        echo -e "${YELLOW}根据 'auto_start=n' 参数，已取消开机自启。${NC}"
-    else
-        systemctl enable "${SERVICE_NAME}"
-        echo -e "${GREEN}根据 'auto_start' 参数 (或默认)，已设置为开机自启。${NC}"
-    fi
+    install_easytier && create_network_service "non_interactive"
     echo -e "\n${GREEN}✔ 非交互式任务执行完毕。${NC}"
+    update_easy_command "non_interactive_first_run"
+    echo -e "${CYAN}提示: 'easy' 快捷命令已安装。请重新登录或执行 'hash -r' 以便立即使用。${NC}"
     exit 0
 fi
 
-# 非交互模式：通过环境变量一键加入网络
 if [[ -n "${join:-}" ]]; then
     echo -e "${YELLOW}检测到 'join' 参数，进入非交互模式...${NC}"
-    install_easytier
-    join_network_service
-    if [[ "${auto_start:-}" == "n" ]]; then
-        systemctl disable "${SERVICE_NAME}"
-        echo -e "${YELLOW}根据 'auto_start=n' 参数，已取消开机自启。${NC}"
-    else
-        systemctl enable "${SERVICE_NAME}"
-        echo -e "${GREEN}根据 'auto_start' 参数 (或默认)，已设置为开机自启。${NC}"
-    fi
+    install_easytier && join_network_service "non_interactive" "$join"
     echo -e "\n${GREEN}✔ 非交互式任务执行完毕。${NC}"
+    update_easy_command "non_interactive_first_run"
+    echo -e "${CYAN}提示: 'easy' 快捷命令已安装。请重新登录或执行 'hash -r' 以便立即使用。${NC}"
     exit 0
 fi
 
-# 交互模式主循环
+if [[ "$(basename "$0")" != "easy" && "$0" != "$EASY_COMMAND_PATH" && ! -f "$EASY_COMMAND_PATH" ]]; then
+    echo -e "${YELLOW}>>> 检测到您还未安装 'easy' 快捷命令。${NC}"
+    echo -e "${YELLOW}>>> 安装后，您可以在任何路径下使用 'sudo easy' 打开此面板。${NC}"
+    read -r -p "是否立即安装? [Y/n]: " install_easy_now
+    if [[ ! "$install_easy_now" =~ ^[Nn]$ ]]; then
+        update_easy_command
+    fi
+fi
+
 while true; do
     clear
     show_menu
     case "$choice" in
         1) install_easytier ;;
-        2) create_network_service ;;
-        3) join_network_service ;;
+        2) create_network_service "interactive" ;;
+        3) join_network_service "interactive" "" ;;
         4) view_service_status ;;
         5) view_pool_ips ;;
         6) view_routes ;;
         7) view_startup_command ;;
         8) generate_client_command ;;
-        9) manage_autostart ;;
-        10) stop_service ;;
+        9) manage_easy_command ;;
+        10) manage_autostart ;;
+        11) stop_service ;;
         99) uninstall_easytier; exit 0 ;;
         0) echo -e "${GREEN}退出脚本。${NC}"; exit 0 ;;
         *) echo -e "${RED}无效选项，请重新输入。${NC}" ;;
